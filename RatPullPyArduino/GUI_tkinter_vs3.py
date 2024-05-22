@@ -1,0 +1,356 @@
+from tkinter import *
+import tkinter.font as font
+import time as t
+from datetime import datetime
+from datetime import timedelta
+import serial
+import math
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import pandas as pd
+from tkinter.filedialog import askopenfilename
+import serial.tools.list_ports
+import sys
+from collections import deque
+
+ports = serial.tools.list_ports.comports()
+port_found = None
+for port in ports:
+    print("Port:", port.device)
+    print("Description:", port.description)
+    print("Hardware ID:", port.hwid)
+    print("Manufacturer:", port.manufacturer)
+    print("Product:", port.product)
+    print("Serial Number:", port.serial_number)
+    print("===================================")
+    
+    if "arduino" in port.description.lower():
+        print(port.description.lower())
+        description = port.description
+        print(description)
+        port_found = port.device
+if port_found == None:
+    print("Arduino not found")
+    sys.exit()
+else:
+    print(f"Arduino found at port {port_found} in description {description}")
+    
+# Serial communication
+
+arduino = serial.Serial(port_found, 115211)
+t.sleep(1)
+arduino.flushInput()  # vide le buffer en provenance de l'arduino
+
+# création de l'interface avec titre et taille de la fenêtre
+top = Tk()
+top.title("Moto Knob Controller")
+# top.minsize(1211, 611)
+
+# variables
+onVarCheckButton = IntVar(top)
+offVarCheckButton = IntVar(top)
+savefolder = StringVar(top)
+iniThreshold = StringVar(top)
+iniBaseline = StringVar(top)
+
+
+global buffer_size
+buffer_size = 1000
+
+dataDeque = deque([0] * buffer_size, maxlen=buffer_size)
+timeDeque = deque([0] * buffer_size, maxlen=buffer_size) 
+
+# StorageVariable
+global sensorValueTrial
+sensorValueTrial = np.empty((1, buffer_size),
+                            dtype="float")  # accumulation ligne par ligne des valeurs du senseur à chaque essai
+global sensorTimeStamp
+sensorTimeStamp = np.empty((1, buffer_size), dtype="float")  # les temps pour chacun des essais
+
+Cadre6 = Frame(top)
+Cadre6.grid(row=2, column=2)
+
+Title_array = Label(Cadre6, text="Knob Rotation Angle").grid(row=1, column=1, columnspan=2, pady=2)
+fig = plt.Figure(figsize=(3, 2), dpi=211, layout='constrained')
+ax = fig.add_subplot(111)
+canvas = FigureCanvasTkAgg(fig, master=Cadre6)  # tk.DrawingArea.
+canvas.get_tk_widget().grid(row=1, column=1, columnspan=2, sticky='E', pady=2)
+
+
+# Boutons de contrôle____________________________________________________________
+def sendArduino(text):
+    cmd = text + '\r'
+    arduino.write(cmd.encode())
+    arduino.reset_output_buffer()
+
+
+def readArduinoInput():
+    # Arduino envoie deux lignes une première de valeurs du senseur et une deuxième des timestamps
+    global sensorValueTrial
+    global sensorTimeStamp
+    global dataDeque, timeDeque
+
+    dataArray, timeArray = readArduinoLine()
+    print("data")
+    
+    print(dataArray)
+    if (len(dataArray) < buffer_size):
+        dataArray = np.pad(dataArray, (0,  (buffer_size - len(dataArray))), mode="constant")
+    elif (len(dataArray) > buffer_size):
+        tempData = np.array(dataArray[len(dataArray) - buffer_size:])
+        dataArray = np.reshape(tempData, (1, -1))
+
+    # # Deuxième ligne
+        
+
+    # compilation des essais
+    print("sensorValueTrial len: " + str(len(sensorValueTrial)))
+    print("dataArray len: " + str(len(dataArray)))
+    print("sensorTimeStamp len: " + str(len(sensorTimeStamp)))
+    print("timeArray len: " + str(len(timeArray)))
+
+
+
+    sensorValueTrial = np.vstack((sensorValueTrial, dataArray))
+    sensorTimeStamp = np.vstack((sensorTimeStamp, timeArray))  # les temps pour chacun des essais
+    plotData(timeArray, dataArray)
+    # arduino.flushInput()  # vide le buffer en provenance de l'arduino
+
+def readArduinoLine():
+    output = arduino.readline()
+    output = str(output, 'utf-8')
+    print(output)
+    if ("d" not in output or "t" not in output or "fin\r\n" not in output):
+        print("full input not found")
+        return np.zeros(buffer_size), np.zeros(buffer_size)
+    else:
+        print("fin was found")
+    output = output.strip(';fin\r\n')  # input en 'string'. Each arduino value is separated by ';'
+    output = output.strip('d')
+    
+    data = output.split(";t", 1)
+    dataDeque.extend(data[0].split(';'))
+    timeDeque.extend(data[1].split(';'))
+    dataArray = np.array(dataDeque).astype(float)
+    timeArray = np.array(timeDeque).astype(float)
+    print(len(dataArray))
+    print(len(timeArray))
+
+    return dataArray, timeArray
+
+
+
+def listStr2listFloat(inList):
+    #can be replaced with .asType(float)
+    floatList = np.zeros(len(inList), dtype=float)
+    u = 0
+    for val in inList:
+        if val == "":
+            val = 0
+        floatList[u] = float(val)
+        u = u + 1
+    floatList = np.reshape(floatList, (1, len(floatList)))
+    # print(floatList)
+
+    return floatList
+
+global max_force
+max_force = 0
+def plotData(time_Array, data_Array):
+    # axeTempRel
+    global max_force
+    
+    axeTempRel = (time_Array - time_Array.min()) / 1000
+    max_time = axeTempRel.max()
+    print(max_time)
+    print(axeTempRel)
+
+    ax.clear()
+
+    max_force = data_Array.max() if data_Array.max() >= max_force else max_force
+    ax.plot(axeTempRel, data_Array)
+    
+    ticks = np.arange(0, max_time, .5)
+    ax.set_xticks(ticks)
+    ticks = np.arange(0, max_force + 100, 100)
+    ax.set_yticks(ticks)
+    ax.set_ylim(-100, max_force + 100)
+    ax.tick_params(axis='both', labelsize=3)
+
+    ax.set_xlabel('times (s)')
+
+    ax.set_ylabel('Force')
+    ax.margins(.15)
+   
+    canvas.draw()
+    canvas.flush_events()
+
+
+def chronometer(debut):
+    chrono_sec = t.time() - debut
+    chrono_timeLapse = timedelta(seconds=chrono_sec)
+    timer_label.config(text=str(chrono_timeLapse))
+
+
+def startButton():
+    # Déclenche la session comportement
+
+    sendArduino("s" + iniThreshold.get() + "b" + iniBaseline.get()) # déclenche la boucle essai dans arduino et envoie le seuil pour déclencher l essaie
+    # t.sleep(8) # permet au buffer d'arduino de se remplir
+
+
+
+    # Boucle sans fin
+    arduino.flushInput()
+    debut = t.time()
+    while onVarCheckButton.get():
+        chronometer(debut)
+        if arduino.inWaiting() > 1:
+           readArduinoInput()
+
+        top.update()
+
+#def
+
+Cadre3 = Frame(top)
+Cadre3.grid(row=3, column=1)
+timer_running = False
+Gras = font.Font(weight="bold")  # variable qui contient l'attribut "texte en gras"
+
+
+# stop l'expérience
+def stop_Button():
+    sendArduino("w")
+    onVarCheckButton.set(0)
+
+
+startButton_name = Checkbutton(Cadre3, text="START", background='green', variable=onVarCheckButton, command=startButton)
+startButton_name.grid(row=1, column=1)
+
+feedButton = Button(Cadre3, text="FEED", background='blue', state=DISABLED)
+feedButton.grid(row=1, column=2)
+
+pauseButton = Checkbutton(Cadre3, text='PAUSE', state=DISABLED)
+pauseButton.grid(row=1, column=4)
+
+stopButton = Checkbutton(Cadre3, text="STOP", background='red', variable=onVarCheckButton, command=stop_Button)
+stopButton.grid(row=1, column=6)
+# _______________________________________________________________________________
+
+# définition du premier cadre
+Cadre1 = Frame(top)
+Cadre1.grid(row=1, column=1)
+
+# Boutons de tests_______________________________________________________________
+Title = Label(Cadre1, text="Moto Track", fg='blue', justify=CENTER, font=Gras).grid(row=1, column=2)
+Connect = Button(Cadre1, text="Connect\nMoto Track").grid(row=1, column=5)
+Retract = Button(Cadre1, text="Retract\nSensor At Pos", state=DISABLED).grid(row=2, column=5)
+
+# infos sur le rat et la sauvegarde des données
+Rat = Label(Cadre1, text="Rat ID:").grid(row=2, column=1)
+Rat_ID = Entry(Cadre1, ).grid(row=2, column=2)
+
+
+def browse():
+    Save_browser = askopenfilename()
+    Save_location.delete(1, END)
+    Save_location.insert(1, Save_browser)
+
+
+Save = Label(Cadre1, text="Save location (parent folder):").grid(row=3, column=1)
+Save_location = Entry(Cadre1, textvariable=savefolder).grid(row=3, column=2)
+Browse = Button(Cadre1, text="Browse", command=browse)
+Browse.grid(row=3, column=3)
+
+Calibration = Label(Cadre1, text="Calibration file location:").grid(row=4, column=1)
+Calib = Entry(Cadre1, ).grid(row=4, column=2)
+Change = Button(Cadre1, text="Change").grid(row=4, column=3)
+
+
+def save_session():
+    global sensorValueTrial
+    global sensorTimeStamp
+    dir_target = savefolder.get()
+    np.savetxt(dir_target, sensorValueTrial, delimiter=",")
+
+
+Save_session = Button(Cadre1, text="Save Session", command=save_session)
+Save_session.grid(row=5, column=1)
+# _______________________________________________________________________________
+
+
+# --------------------------------
+Cadre5 = Frame(top)
+Cadre5.grid(row=2, column=1)
+Cadre5.config(borderwidth=2, relief=RIDGE)
+
+Parametre = Label(Cadre5, text="Parameters", fg='blue', justify=CENTER, font=Gras).grid(row=1, column=1)
+
+Duree = Label(Cadre5, text="Duration (min):").grid(row=2, column=1)
+min = Entry(Cadre5).grid(row=2, column=2)
+
+Hit_window = Label(Cadre5, text="Hit window (s):").grid(row=2, column=3)
+HW = Entry(Cadre5).grid(row=2, column=4)
+
+Sensor_pos = Label(Cadre5, text="Sensor pos (cm):").grid(row=3, column=1)
+Sensor = Entry(Cadre5).grid(row=3, column=2)
+
+Init_thresh = Label(Cadre5, text="Init thresh (deg):").grid(row=3, column=3)
+IT = Entry(Cadre5, textvariable = iniThreshold).grid(row=3, column=4)
+
+Init_baseline = Label(Cadre5, text="Init baseline (deg):").grid(row=3, column=5)
+IB = Entry(Cadre5, textvariable = iniBaseline).grid(row=3, column=6)
+
+adaptive = Label(Cadre5, text="adaptive").grid(row=4, column=3)
+
+
+# def adapt_thres():
+
+def manage_threshold():
+    if min_thresh['state'] == 'disabled' and max_thresh['state'] == 'disabled':
+        min_thresh['state'] = 'normal'
+        max_thresh['state'] = 'normal'
+    elif min_thresh['state'] == 'normal' and max_thresh['state'] == 'normal':
+        min_thresh['state'] = 'disabled'
+        max_thresh['state'] = 'disabled'
+
+
+adapter_threshold = IntVar()
+adapt_thresh = Checkbutton(Cadre5).grid(row=5, column=3)  # command=manage_threshold
+adapt_ceiling = Checkbutton(Cadre5, state=DISABLED).grid(row=6, column=3)
+adapt_time = Checkbutton(Cadre5, state=DISABLED).grid(row=7, column=3)
+
+min = Label(Cadre5, text="min").grid(row=4, column=4)
+min_thresh = Entry(Cadre5, state=DISABLED).grid(row=5, column=4)
+min_ceiling = Entry(Cadre5, state=DISABLED).grid(row=6, column=4)
+min_time = Entry(Cadre5, state=DISABLED).grid(row=7, column=4)
+
+max = Label(Cadre5, text="max").grid(row=4, column=5)
+max_thresh = Entry(Cadre5, state=DISABLED).grid(row=5, column=5)
+max_ceiling = Entry(Cadre5, state=DISABLED).grid(row=6, column=5)
+max_time = Entry(Cadre5, state=DISABLED).grid(row=7, column=5)
+
+Hit_thresh = Label(Cadre5, text="Hit Thresh (deg):").grid(row=5, column=1)
+HThresh = Entry(Cadre5).grid(row=5, column=2)
+
+Hit_ceiling = Label(Cadre5, text="Hit ceiling (deg):", state=DISABLED).grid(row=6, column=1)
+HC = Entry(Cadre5, state=DISABLED).grid(row=6, column=2)
+
+Hold_time = Label(Cadre5, text="Hold time (s):", state=DISABLED).grid(row=7, column=1)
+HTime = Entry(Cadre5, state=DISABLED).grid(row=7, column=2)
+
+# #infos sur les trials, rewards et temps passé
+Cadre4 = Frame(top)
+Cadre4.grid(row=1, column=2)
+
+Trials = Label(Cadre4, text="Num Trials:", font=Gras).grid(row=1, column=1)
+Rewards = Label(Cadre4, text="Num Rewards:", font=Gras).grid(row=1, column=1)
+Med_pick = Label(Cadre4, text="Median Peak:", font=Gras).grid(row=2, column=1)
+Pellet = Label(Cadre4, text="Pellet delivered:", font=Gras).grid(row=1, column=3)
+timer_label = Label(Cadre4, text="Time elapsed: 11:11:11", font=Gras)
+timer_label.grid(row=2, column=3)
+
+# #_______________________________________________________________________________
+top.mainloop()

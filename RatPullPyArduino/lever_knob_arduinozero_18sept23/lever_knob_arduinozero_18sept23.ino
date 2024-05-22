@@ -1,0 +1,538 @@
+// #include <CircularBuffer.h>
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpsabi"
+
+// #pragma GCC diagnostic pop
+
+#include <queue>
+#include <chrono>
+#include <string>
+#include <vector>
+#include <algorithm>  // Include the algorithm header for std::copy_if
+#include <iterator>   // Include the iterator header for std::back_inserter
+#include <numeric>
+
+using namespace std;
+
+// DECLARATION VARIABLES------------
+const int lenBuffer = 1000;
+std::deque<int> dataBuffer(lenBuffer, 0);
+// CircularBuffer<int, lenBuffer> dataBuffer;
+int AnalogIN = A0;
+int leverVal;
+int DL = 10;           // sampling freq
+int DL_Sampling = 10;  // buffer freq : every x ms
+float valMoyenne;
+float initTrial;
+float baselineTrial;
+int aveOnLast = 10;
+float ave = 0.0;
+unsigned long startArduinoProg;
+unsigned long startSession;
+unsigned long startTrial;
+unsigned long bufferTimeFreq;
+unsigned long stopTrial;
+unsigned long LastTime;  // le dernier temps du buffer data
+int compteur = 0;
+String serialCommand = "wait";
+bool sendData = false;
+
+auto loop_timer = std::chrono::high_resolution_clock::now();
+auto experiment_start = std::chrono::high_resolution_clock::now();
+double pause_time;
+//Input Parameters
+int num_rewards = 0;
+int num_trials = 0;
+int moduleValue_now = 0;
+int peak_moduleValue = 0;
+auto hold_timer = std::chrono::high_resolution_clock::now();
+auto it_timer = std::chrono::high_resolution_clock::now();
+std::vector<std::vector<double>> tmp_value_buffer;    // [time value], first row is oldest data
+std::vector<std::vector<double>> trial_value_buffer;  // [time value]
+double duration;
+int MaxTrialNum;
+double hold_time_min;
+double hit_thresh_min;
+
+//Initial Parameters
+int num_pellets = 0;
+std::deque<bool> past_10_trials_succ;
+
+
+int init_thresh = 0;
+double session_t;
+
+
+int moduleValue_before;
+
+bool trial_started = false;
+unsigned long trial_start_time;
+unsigned long trial_end_time;
+unsigned long trial_time;
+bool success = false;
+// std::list<std::list<double>> trial_value_buffer; // Assuming buffer size is 2x2
+bool crashed = false;  // Assuming this variable is declared elsewhere
+int duration_minutes;  // Assuming app.duration.Value is in minutes
+int max_trial_num;
+bool stop_session;
+bool pause_session;
+int hit_thresh;
+int hit_window;
+double failure_tolerance;
+double hold_time;
+double hit_thresh_max;
+double hold_time_max;
+bool adapt_hit_thresh;
+bool adapt_hold_time;
+bool adapt_drop_tolerance;
+int post_trial_dur;
+int inter_trial_dur;
+double buffer_dur = 1;
+
+
+// Define STATES
+enum State {
+  STATE_IDLE,
+  STATE_TRIAL_INIT,
+  STATE_TRIAL_STARTED,
+  STATE_HOLD,
+  STATE_SUCCESS,
+  STATE_FAILURE,
+  STATE_POST_TRIAL,
+  STATE_PARAM_UPDATE,
+  STATE_INTER_TRIAL,
+  STATE_SESSION_END
+};
+
+State CURRENT_STATE = STATE_IDLE;
+State NEXT_STATE = CURRENT_STATE;
+
+// FONCTIONS ---------------------------------
+
+
+double timePointsToDouble(const std::chrono::time_point<std::chrono::high_resolution_clock>& start, const std::chrono::time_point<std::chrono::high_resolution_clock>& end) {
+  auto duration = end - start;
+  double double_duration = std::chrono::duration_cast<std::chrono::duration<double>>(duration).count();
+  return double_duration;
+}
+
+double getTimerDuration(const std::chrono::time_point<std::chrono::high_resolution_clock>& start) {
+  return timePointsToDouble(start, std::chrono::high_resolution_clock::now());
+}
+
+double getMean(std::vector<double> numbers) {
+  double sum = std::accumulate(numbers.begin(), numbers.end(), 0.0);
+
+  double average = sum / numbers.size();
+  return average;
+}
+double getBoolMean(deque<bool> bools) {
+  double sum = std::accumulate(bools.begin(), bools.end(), 0.0);
+
+  double average = sum / bools.size();
+  return average;
+}
+
+void stateMachine() {
+  if (pause_session) {
+    //%accumulate pause_time (in app code) and skip state machine
+    delay(1000);
+    // continue;
+    return;
+  }
+
+  // warn if longer than expected loop delays
+  auto loop_time_duration = std::chrono::high_resolution_clock::now() - loop_timer;
+  double loop_time = std::chrono::duration_cast<std::chrono::duration<double>>(loop_time_duration).count();
+  if (loop_time > 0.1) {
+    // fprintf('--- WARNING --- \nlong delay in while loop (%.0f ms)\n', loop_time * 1000);
+  }
+  loop_timer = std::chrono::high_resolution_clock::now();
+
+  // experiment time
+  session_t = timePointsToDouble(experiment_start, std::chrono::high_resolution_clock::now()) - pause_time;
+  // app.TimeelapsedCounterLabel.Text = datestr((session_t) / 86400, 'HH:MM:SS');
+  // drawnow limitrate;  // process callbacks, update figures at 20Hz max
+
+  //% read module force
+  moduleValue_before = moduleValue_now;    // store previous value
+  moduleValue_now = analogRead(AnalogIN);  // update current value
+
+  // fill force buffer
+  // limit temp buffer size to 'buffer_dur' (last 1s of data)
+  // tmp_value_buffer = [tmp_value_buffer(session_t - tmp_value_buffer(:, 1) <= app.buffer_dur, :); session_t moduleValue_now];
+
+  auto condition = [&](const std::vector<double>& row) {
+    return session_t - row[0] <= buffer_dur;
+  };
+
+  std::vector<std::vector<double>> filtered_rows;
+  std::copy_if(tmp_value_buffer.begin(), tmp_value_buffer.end(), std::back_inserter(filtered_rows), condition);
+  tmp_value_buffer = filtered_rows;
+
+
+  if (trial_started) {
+    // update trial_buffer that keeps data 1 second before trial initiation until end of trial:
+    trial_time = session_t - trial_start_time;
+    vector<double> values;
+    values.push_back(trial_time);
+    values.push_back(moduleValue_now);
+    trial_value_buffer.push_back(values);
+
+    // and keep track of trial peak force
+    peak_moduleValue = max(peak_moduleValue, moduleValue_now);
+  }
+
+
+  // STATE MACHINE
+  switch (CURRENT_STATE) {
+    // STATE_IDLE
+    case STATE_IDLE:
+      digitalWrite(13, HIGH);
+      digitalWrite(12, HIGH);
+      if (session_t > duration * 60) {
+        //disp('Time Out');
+        NEXT_STATE = STATE_SESSION_END;
+      }
+
+      else if (num_trials >= MaxTrialNum) {
+        //disp('Reached Maximum Number of Trials');
+        NEXT_STATE = STATE_SESSION_END;
+      }
+
+      else if (stop_session) {
+        //disp('Manual Stop')
+        NEXT_STATE = STATE_SESSION_END;
+      }
+
+      else {
+        // check for trial initiation
+        if (moduleValue_now >= init_thresh && moduleValue_before < init_thresh) {
+          // checking value before < init_thresh ensures force is increasing i.e. not already high from previous trial
+          NEXT_STATE = STATE_TRIAL_INIT;
+        }
+      }
+
+    //STATE_TRIAL_INIT
+    case STATE_TRIAL_INIT:
+      digitalWrite(13, HIGH);
+      digitalWrite(12, LOW);
+      // trial initiated
+      trial_start_time = session_t;
+      //disp('Trial initiated... ');
+      // play(init_sound{1});
+      trial_started = true;
+      num_trials = num_trials + 1;
+
+      //clear force plot
+      //TO-DO: send data to be drawn in plot in python
+      // set(app.force_line, 'Visible','off');
+      // update_lines_in_fig(app);
+
+      // update GUI counters
+      //TO-DO: send data to python
+      // app.NumTrialsCounterLabel.Text = num2str(num_trials);
+
+      // Output one digital pulse for onset of trial
+      //TODO
+      // app.moto.stim();
+
+      // start recording force data (%skip last entry, it will be added below after the "if trial_started" section
+
+      // trial_value_buffer = [tmp_value_buffer(1:end - 1, 1) - trial_start_time, tmp_value_buffer(1:end - 1, 2)];
+
+      for (size_t i = 0; i < tmp_value_buffer.size() - 1; ++i) {
+        double modified_value = tmp_value_buffer[i][0] - trial_start_time;
+        trial_value_buffer.push_back({ modified_value, tmp_value_buffer[i][1] });
+      }
+
+      NEXT_STATE = STATE_TRIAL_STARTED;
+
+    // STATE_TRIAL_STARTED
+    case STATE_TRIAL_STARTED:
+      digitalWrite(13, LOW);
+      digitalWrite(12, HIGH);
+      // check if trial time out (give a chance to continue if force > hit_thresh)
+      if (trial_time > hit_window && moduleValue_now < hit_thresh) {
+        NEXT_STATE = STATE_FAILURE;
+      }
+      // check if force decreased from peak too much
+      else if (moduleValue_now <= (peak_moduleValue - failure_tolerance)) {
+        NEXT_STATE = STATE_FAILURE;
+      }
+      // check if hit threshold has been reached
+      else if (moduleValue_now >= hit_thresh) {
+        hold_timer = std::chrono::high_resolution_clock::now();
+        NEXT_STATE = STATE_HOLD;
+      }
+
+    // STATE_HOLD
+    case STATE_HOLD:
+
+      //check if still in reward zone
+      if (moduleValue_now < hit_thresh) {
+        hold_timer = std::chrono::high_resolution_clock::now();
+        ;
+        NEXT_STATE = STATE_TRIAL_STARTED;
+      } else if (getTimerDuration(hold_timer) >= hold_time / 1000) {
+        // convert from ms to seconds
+        NEXT_STATE = STATE_SUCCESS;
+      }
+
+    // STATE_SUCCESS
+    case STATE_SUCCESS:
+      digitalWrite(13, LOW);
+      digitalWrite(12, LOW);
+      // we have a success! execute only once
+      // fprintf('trial successful! :D\n');
+
+      //TODO
+      // play(reward_sound{1});
+      // drawnow;
+      success = true;
+      trial_end_time = trial_time;
+      // past_10_trials_succ = [true, past_10_trials_succ(1:end - 1)];
+      if (past_10_trials_succ.size() >= 10) {
+        past_10_trials_succ.pop_back();
+      }
+      past_10_trials_succ.push_front(true);
+
+      // send 1 pellet
+      // app.moto.trigger_feeder(1); TODO
+
+      // send 1 digital pulse
+      // app.moto.stim(); TODO
+
+      // adapt hit_threshold
+      if (adapt_hit_thresh) {
+        // if success rate 70% or more, increase hit_thresh by 1g
+        if (getBoolMean(past_10_trials_succ) >= 0.7) {
+          hit_thresh = min(hit_thresh_max, hit_thresh + 1);
+        }
+      }
+
+      // adapt hold_time
+      if (adapt_hold_time) {
+        // if success rate 70% or more, increase hit_thresh by 10 ms
+        if (getBoolMean(past_10_trials_succ) >= 0.7) {
+          hold_time = min(hold_time_max, hold_time + 10);
+        }
+      }
+
+      //update stats & update gui
+      num_rewards++;
+      num_pellets++;
+      //TODO
+      // app.PelletsdeliveredCounterLabel.Text = sprintf('%d (%.3f g)', sum(app.num_pellets) + app.man_pellets, (sum(app.num_pellets) + app.man_pellets) * 0.045); //each pellet 45mg
+      // app.NumRewardsCounterLabel.Text = num2str(num_rewards);
+
+      NEXT_STATE = STATE_POST_TRIAL;
+
+    // STATE_FAILURE
+    case STATE_FAILURE:
+      // trial failed. execute only once
+      // fprintf('trial failed :(\n');
+      //TODO
+      // play(failure_sound{1});
+
+      // past_10_trials_succ = [false, past_10_trials_succ(1:end - 1)];
+
+      if (past_10_trials_succ.size() >= 10) {
+        past_10_trials_succ.pop_back();
+      }
+      past_10_trials_succ.push_front(false);
+
+      success = false;
+      trial_end_time = trial_time;
+
+      // adapt hit_threshold
+      if (adapt_hit_thresh) {
+        // if success rate 40% or less, decrease hit_thresh by 1g
+        if (getBoolMean(past_10_trials_succ) <= 0.4) {
+          hit_thresh = max(hit_thresh_min, hit_thresh - 1);
+        }
+      }
+
+      // adapt hold_time
+      if (adapt_hold_time) {
+        // if success rate 40% or less, decrease hold_time by 10 ms
+        if (getBoolMean(past_10_trials_succ) <= 0.4) {
+          hold_time = max(hold_time_min, hold_time - 10);
+        }
+      }
+
+      NEXT_STATE = STATE_POST_TRIAL;
+
+    // STATE_POST_TRIAL
+    case STATE_POST_TRIAL:
+
+      // wait to accumulate a bit of post_trial data
+      if (trial_time - trial_end_time >= post_trial_dur) {
+
+        NEXT_STATE = STATE_PARAM_UPDATE;
+      }
+
+    // STATE_PARAM_UPDATE
+    case STATE_PARAM_UPDATE:
+
+      // post trial processing, execute only once.
+
+      // update force plot with new trial data
+
+      //TODO
+
+      // set(app.force_line, 'XData', trial_value_buffer(:, 1), ...
+      //     'YData', trial_value_buffer(:, 2),'Visible','on');
+      // ymax = max(app.hit_thresh.Value, peak_moduleValue) * 1.25;
+      // ylim(app.moduleValueAxes, [-5 ymax]);
+
+      // // update trial_table
+      // trial_table(num_trials, :) = {trial_start_time, app.init_thresh.Value, app.hit_thresh.Value, trial_value_buffer, ...
+      //     app.hold_time.Value, trial_end_time, success, peak_moduleValue};
+
+      // reset data buffer
+      trial_value_buffer.clear();
+      peak_moduleValue = 0;
+      success = false;
+
+      it_timer = std::chrono::high_resolution_clock::now();
+      NEXT_STATE = STATE_INTER_TRIAL;
+
+    // STATE_INTER_TRIAL
+    case STATE_INTER_TRIAL:
+
+      // wait a short period of time between trials
+      if (getTimerDuration(it_timer) >= inter_trial_dur) {
+        it_timer = std::chrono::high_resolution_clock::now();
+        NEXT_STATE = STATE_IDLE;
+      }
+
+    case STATE_SESSION_END:
+      //TO-DO
+      // finish_up(trial_table,session_t, num_trials, num_rewards, app, crashed);
+      // exit while loop
+      break;
+
+    default:
+
+      //disp('error in state machine!');
+      //TO-DO
+      // finish_up(trial_table,session_t, num_trials, num_rewards, app, crashed);
+      // exit while loop
+      break;
+  }
+
+  CURRENT_STATE = NEXT_STATE;
+}
+
+// void finish_up(trial_table, session_t, num_trials, num_rewards, app, crashed) {
+//   //TO-DO
+// }
+float avebuffer(int aveOnLast) {
+  // sort la moyenne des x derniers
+  float ave = 0.0;
+  for (int i = dataBuffer.size() - aveOnLast; i < dataBuffer.size(); i++) {
+    ave += dataBuffer[i];
+  }
+  ave = ave / aveOnLast;
+  return ave;
+}
+
+
+void sendData2Python() {
+  // envoie les données de l'essai : sous la forme ##;##;##;...fin et
+  // la forme temps correspondant en seconde ligne
+  unsigned long timeStamp;
+  unsigned long StartTime;
+  SerialUSB.flush();
+  // Data
+  SerialUSB.print('d');
+  for (int i = 0; i < dataBuffer.size(); i++) {
+    SerialUSB.print(dataBuffer[i]);
+    SerialUSB.print(';');
+  }
+  // Temps
+  StartTime = LastTime - (lenBuffer * DL_Sampling);
+  SerialUSB.print('t');
+  for (int i = 0; i < dataBuffer.size(); i++) {
+    timeStamp = StartTime + (i * DL_Sampling);
+    SerialUSB.print(timeStamp);
+    SerialUSB.print(';');
+  }
+  SerialUSB.println("fin");
+  // code de fin d'envoi de données
+}
+
+
+void fillBuffer() {
+  // Rempli la pile temps et data et retourne la moyenne des n dernières valeurs data
+
+  // rempli le buffer data
+  leverVal = analogRead(AnalogIN);
+  if (dataBuffer.size() >= lenBuffer) {
+    dataBuffer.pop_front();
+  }
+  dataBuffer.push_back(leverVal);
+
+  // Prends en note le dernier temps enregistre dans le buffer
+  LastTime = millis() - startArduinoProg;
+  delay(10);
+}
+void experimentOn() {
+
+  int posIndice;
+
+  // Devrait aller dans 'case i' :
+  posIndice = serialCommand.indexOf('b');
+  initTrial = serialCommand.substring(1, posIndice).toFloat();
+  baselineTrial = serialCommand.substring(posIndice + 1).toFloat();
+  while (serialCommand.charAt(0) == 's') {
+    delay(5);
+    if (SerialUSB.available() > 0) {
+      serialCommand = SerialUSB.readStringUntil('\r');
+    }
+    // stateMachine();
+    fillBuffer();
+    delay(DL_Sampling);
+    valMoyenne = avebuffer(aveOnLast);
+
+    if (valMoyenne > initTrial) {
+      sendData2Python();
+    }
+  }
+}
+
+// INITIALISATION-------------------------------
+void setup() {
+  // put your setup code here, to run once:
+  pinMode(AnalogIN, INPUT);
+  pinMode(13, OUTPUT);
+  pinMode(12, OUTPUT);
+  // pinMode(10, OUTPUT);
+  // pinMode(9,OUTPUT);
+  SerialUSB.begin(115200);      // baud rate
+  startArduinoProg = millis();  // début programme
+  loop_timer = std::chrono::high_resolution_clock::now();
+  experiment_start = std::chrono::high_resolution_clock::now();
+}
+
+void loop() {
+  if (SerialUSB.available() > 0) {
+    serialCommand = SerialUSB.readStringUntil('\r');
+  }
+
+  switch (serialCommand.charAt(0)) {  // Première lettre de la commande
+
+    case 'w':  // boucle defaut standby
+      digitalWrite(13, LOW);
+      break;
+    case 'i':  // Initialisation : transmission des paramètres de la tâche à partir de Python
+      
+      break;
+    case 's':  // Start
+      digitalWrite(13, HIGH);
+      experimentOn();
+      break;
+  }
+}
