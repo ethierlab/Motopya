@@ -48,16 +48,21 @@ top = Tk()
 top.title("Moto Knob Controller")
 # top.minsize(1211, 611)
 
-# variables
+
 onVarCheckButton = IntVar(top)
 offVarCheckButton = IntVar(top)
 savefolder = StringVar(top)
 iniThreshold = StringVar(top)
 iniBaseline = StringVar(top)
+minDuration = StringVar(top)
+hitWindow = StringVar(top)
+hitThresh = StringVar(top)
 
+
+# variables
 
 global buffer_size
-buffer_size = 1000
+buffer_size = 25
 
 dataDeque = deque([0] * buffer_size, maxlen=buffer_size)
 timeDeque = deque([0] * buffer_size, maxlen=buffer_size) 
@@ -170,7 +175,7 @@ def plotData(time_Array, data_Array):
     ax.clear()
 
     max_force = data_Array.max() if data_Array.max() >= max_force else max_force
-    ax.plot(axeTempRel, data_Array)
+    ax.plot(axeTempRel, data_Array, linewidth=0.5)
     
     ticks = np.arange(0, max_time, .5)
     ax.set_xticks(ticks)
@@ -289,10 +294,10 @@ Cadre5.config(borderwidth=2, relief=RIDGE)
 Parametre = Label(Cadre5, text="Parameters", fg='blue', justify=CENTER, font=Gras).grid(row=1, column=1)
 
 Duree = Label(Cadre5, text="Duration (min):").grid(row=2, column=1)
-min = Entry(Cadre5).grid(row=2, column=2)
+min = Entry(Cadre5, textvariable=minDuration).grid(row=2, column=2)
 
 Hit_window = Label(Cadre5, text="Hit window (s):").grid(row=2, column=3)
-HW = Entry(Cadre5).grid(row=2, column=4)
+HW = Entry(Cadre5, textvariable=hitWindow).grid(row=2, column=4)
 
 Sensor_pos = Label(Cadre5, text="Sensor pos (cm):").grid(row=3, column=1)
 Sensor = Entry(Cadre5).grid(row=3, column=2)
@@ -333,13 +338,50 @@ max_ceiling = Entry(Cadre5, state=DISABLED).grid(row=6, column=5)
 max_time = Entry(Cadre5, state=DISABLED).grid(row=7, column=5)
 
 Hit_thresh = Label(Cadre5, text="Hit Thresh (deg):").grid(row=5, column=1)
-HThresh = Entry(Cadre5).grid(row=5, column=2)
+HThresh = Entry(Cadre5, textvariable=hitThresh).grid(row=5, column=2)
 
 Hit_ceiling = Label(Cadre5, text="Hit ceiling (deg):", state=DISABLED).grid(row=6, column=1)
 HC = Entry(Cadre5, state=DISABLED).grid(row=6, column=2)
 
 Hold_time = Label(Cadre5, text="Hold time (s):", state=DISABLED).grid(row=7, column=1)
 HTime = Entry(Cadre5, state=DISABLED).grid(row=7, column=2)
+
+
+def save_parameters():
+    min_duration = minDuration.get().strip()
+    hit_window = hitWindow.get().strip()
+    hit_thresh = hitThresh.get().strip()
+    init_thresh = iniThreshold.get().strip()
+    init_baseline = iniBaseline.get().strip()
+    print(min_duration + "s")
+    print(hit_window + "s")
+    print(hit_thresh + "s")
+    sendArduino("p" + init_thresh + ";" + init_baseline + ";" + min_duration + ";" + hit_window + ";" + hit_thresh)
+    
+
+saveParametersButton = Button(Cadre5, text="Save Parameters", background='white', command=save_parameters, state="disabled")
+saveParametersButton.grid(row=7, column=6)
+
+def is_int(s):
+    try:
+        int(s)
+        return True
+    except ValueError:
+        return False
+
+def entry_changed(*args):
+    if ((iniThreshold.get().strip() and iniBaseline.get().strip() and minDuration.get().strip() and hitWindow.get().strip() and hitThresh.get().strip() )):
+        saveParametersButton.config(state="normal")
+        if not (is_int(iniThreshold.get()) and is_int(iniBaseline.get()) and is_int(minDuration.get()) and is_int(hitWindow.get()) and is_int(hitThresh.get())):
+            saveParametersButton.config(state="disabled")
+    else:
+        saveParametersButton.config(state="disabled")
+
+iniThreshold.trace_add("write", entry_changed)
+iniBaseline.trace_add("write", entry_changed)
+minDuration.trace_add("write", entry_changed)
+hitWindow.trace_add("write", entry_changed)
+hitThresh.trace_add("write", entry_changed)
 
 # #infos sur les trials, rewards et temps passé
 Cadre4 = Frame(top)

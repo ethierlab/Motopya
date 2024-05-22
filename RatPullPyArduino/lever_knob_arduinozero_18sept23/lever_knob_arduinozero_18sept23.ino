@@ -1,5 +1,5 @@
 // #include <CircularBuffer.h>
-
+#pragma GCC optimize ("-fexceptions")
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpsabi"
 
@@ -12,7 +12,8 @@
 #include <algorithm>  // Include the algorithm header for std::copy_if
 #include <iterator>   // Include the iterator header for std::back_inserter
 #include <numeric>
-
+#include <iostream>
+#include <sstream>
 using namespace std;
 
 // DECLARATION VARIABLES------------
@@ -51,7 +52,7 @@ auto it_timer = std::chrono::high_resolution_clock::now();
 std::vector<std::vector<double>> tmp_value_buffer;    // [time value], first row is oldest data
 std::vector<std::vector<double>> trial_value_buffer;  // [time value]
 double duration;
-int MaxTrialNum;
+int MaxTrialNum = 10;
 double hold_time_min;
 double hit_thresh_min;
 
@@ -134,6 +135,84 @@ double getBoolMean(deque<bool> bools) {
   return average;
 }
 
+void flash(int number) {
+  int time = 350;
+  for (int i = 0; i < number; i++) {
+    digitalWrite(12, LOW);
+    digitalWrite(13, HIGH);
+    delay(time);
+    digitalWrite(13, LOW);
+    digitalWrite(12, HIGH);
+    delay(time);
+    digitalWrite(13, LOW);
+    digitalWrite(12, LOW);
+  }
+  delay(500);
+}
+void fastflash(int number) {
+  int time = 100;
+  for (int i = 0; i < number; i++) {
+    digitalWrite(12, LOW);
+    digitalWrite(13, HIGH);
+    delay(time);
+    digitalWrite(13, LOW);
+    digitalWrite(12, HIGH);
+    delay(time);
+    digitalWrite(13, LOW);
+    digitalWrite(12, LOW);
+  }
+  delay(500);
+}
+
+void flash2Decimal(int number) {
+  int time = 300;
+  int tens = number / 10;
+  int ones = number - (tens * 10);
+  for (int i = 0; i < tens; i++) {
+    digitalWrite(12, HIGH);
+    delay(time);
+    digitalWrite(12, LOW);
+    delay(time);
+  }
+  for (int i = 0; i < ones; i++) {
+    digitalWrite(13, HIGH);
+    delay(time);
+    digitalWrite(13, LOW);
+    delay(time);
+  }
+  delay(500);
+}
+
+void flashfloat2Decimal(float number) {
+  int time = 300;
+  int hundreds = number / 100;
+  int tens = (number - (hundreds * 100)) / 10;
+  int ones = number - (tens * 10);
+  for (int i = 0; i < hundreds; i++) {
+    digitalWrite(12, LOW);
+    digitalWrite(13, HIGH);
+    delay(time);
+    digitalWrite(13, LOW);
+    digitalWrite(12, HIGH);
+    delay(time);
+    digitalWrite(13, LOW);
+    digitalWrite(12, LOW);
+  }
+  for (int i = 0; i < tens; i++) {
+    digitalWrite(12, HIGH);
+    delay(time);
+    digitalWrite(12, LOW);
+    delay(time);
+  }
+  for (int i = 0; i < ones; i++) {
+    digitalWrite(13, HIGH);
+    delay(time);
+    digitalWrite(13, LOW);
+    delay(time);
+  }
+  delay(500);
+}
+
 void stateMachine() {
   if (pause_session) {
     //%accumulate pause_time (in app code) and skip state machine
@@ -152,6 +231,7 @@ void stateMachine() {
 
   // experiment time
   session_t = timePointsToDouble(experiment_start, std::chrono::high_resolution_clock::now()) - pause_time;
+  // flashfloat2Decimal(session_t);
   // app.TimeelapsedCounterLabel.Text = datestr((session_t) / 86400, 'HH:MM:SS');
   // drawnow limitrate;  // process callbacks, update figures at 20Hz max
 
@@ -183,41 +263,49 @@ void stateMachine() {
     // and keep track of trial peak force
     peak_moduleValue = max(peak_moduleValue, moduleValue_now);
   }
-
-
   // STATE MACHINE
   switch (CURRENT_STATE) {
     // STATE_IDLE
     case STATE_IDLE:
-      digitalWrite(13, HIGH);
-      digitalWrite(12, HIGH);
-      if (session_t > duration * 60) {
+      flash(6);
+      //removeeee
+      session_t = 0;
+      if (session_t > duration * 60 * 1000) {
+        flash(3);
         //disp('Time Out');
         NEXT_STATE = STATE_SESSION_END;
       }
+      // if (session_t > duration * 60) {
+      //   flash(3);
+      //   //disp('Time Out');
+      //   NEXT_STATE = STATE_SESSION_END;
+      // }
 
       else if (num_trials >= MaxTrialNum) {
+        flash(4);
         //disp('Reached Maximum Number of Trials');
         NEXT_STATE = STATE_SESSION_END;
       }
 
       else if (stop_session) {
+        flash(5);
         //disp('Manual Stop')
         NEXT_STATE = STATE_SESSION_END;
       }
 
       else {
+        fastflash(4);
         // check for trial initiation
         if (moduleValue_now >= init_thresh && moduleValue_before < init_thresh) {
+          fastflash(8);
           // checking value before < init_thresh ensures force is increasing i.e. not already high from previous trial
           NEXT_STATE = STATE_TRIAL_INIT;
         }
       }
-
+      break;
     //STATE_TRIAL_INIT
     case STATE_TRIAL_INIT:
-      digitalWrite(13, HIGH);
-      digitalWrite(12, LOW);
+      flash(8);
       // trial initiated
       trial_start_time = session_t;
       //disp('Trial initiated... ');
@@ -241,18 +329,28 @@ void stateMachine() {
       // start recording force data (%skip last entry, it will be added below after the "if trial_started" section
 
       // trial_value_buffer = [tmp_value_buffer(1:end - 1, 1) - trial_start_time, tmp_value_buffer(1:end - 1, 2)];
-
-      for (size_t i = 0; i < tmp_value_buffer.size() - 1; ++i) {
-        double modified_value = tmp_value_buffer[i][0] - trial_start_time;
-        trial_value_buffer.push_back({ modified_value, tmp_value_buffer[i][1] });
+      flash(2);
+      flash(tmp_value_buffer.size());
+      delay(5000);
+      for (size_t i = 0; i < tmp_value_buffer.size() - 1; i++) {
+        try {
+          flash(1);
+          double modified_value = tmp_value_buffer[i][0] - trial_start_time;
+          fastflash(3);
+          trial_value_buffer.push_back({ modified_value, tmp_value_buffer[i][1] });
+          fastflash(7);
+        } catch (const std::exception& e) {
+          // sendError2Python(e.what());
+        }   
+        
       }
 
       NEXT_STATE = STATE_TRIAL_STARTED;
-
+      fastflash(25);
+      break;
     // STATE_TRIAL_STARTED
     case STATE_TRIAL_STARTED:
-      digitalWrite(13, LOW);
-      digitalWrite(12, HIGH);
+      flash(7);
       // check if trial time out (give a chance to continue if force > hit_thresh)
       if (trial_time > hit_window && moduleValue_now < hit_thresh) {
         NEXT_STATE = STATE_FAILURE;
@@ -266,24 +364,22 @@ void stateMachine() {
         hold_timer = std::chrono::high_resolution_clock::now();
         NEXT_STATE = STATE_HOLD;
       }
-
+      break;
     // STATE_HOLD
     case STATE_HOLD:
 
       //check if still in reward zone
       if (moduleValue_now < hit_thresh) {
         hold_timer = std::chrono::high_resolution_clock::now();
-        ;
         NEXT_STATE = STATE_TRIAL_STARTED;
       } else if (getTimerDuration(hold_timer) >= hold_time / 1000) {
         // convert from ms to seconds
         NEXT_STATE = STATE_SUCCESS;
       }
-
+      break;
     // STATE_SUCCESS
     case STATE_SUCCESS:
-      digitalWrite(13, LOW);
-      digitalWrite(12, LOW);
+      flash(4);
       // we have a success! execute only once
       // fprintf('trial successful! :D\n');
 
@@ -328,9 +424,10 @@ void stateMachine() {
       // app.NumRewardsCounterLabel.Text = num2str(num_rewards);
 
       NEXT_STATE = STATE_POST_TRIAL;
-
+      break;
     // STATE_FAILURE
     case STATE_FAILURE:
+      fastflash(20);
       // trial failed. execute only once
       // fprintf('trial failed :(\n');
       //TODO
@@ -361,21 +458,21 @@ void stateMachine() {
           hold_time = max(hold_time_min, hold_time - 10);
         }
       }
-
+      
       NEXT_STATE = STATE_POST_TRIAL;
-
+      break;
     // STATE_POST_TRIAL
     case STATE_POST_TRIAL:
-
+      flash(5);
       // wait to accumulate a bit of post_trial data
       if (trial_time - trial_end_time >= post_trial_dur) {
 
         NEXT_STATE = STATE_PARAM_UPDATE;
       }
-
+      break;
     // STATE_PARAM_UPDATE
     case STATE_PARAM_UPDATE:
-
+      flash(6);
       // post trial processing, execute only once.
 
       // update force plot with new trial data
@@ -398,24 +495,26 @@ void stateMachine() {
 
       it_timer = std::chrono::high_resolution_clock::now();
       NEXT_STATE = STATE_INTER_TRIAL;
-
+      break;
     // STATE_INTER_TRIAL
     case STATE_INTER_TRIAL:
-
+      flash(12);
       // wait a short period of time between trials
       if (getTimerDuration(it_timer) >= inter_trial_dur) {
         it_timer = std::chrono::high_resolution_clock::now();
         NEXT_STATE = STATE_IDLE;
       }
 
+      break;
     case STATE_SESSION_END:
+      flash(5);
       //TO-DO
       // finish_up(trial_table,session_t, num_trials, num_rewards, app, crashed);
       // exit while loop
       break;
 
     default:
-
+      fastflash(20);
       //disp('error in state machine!');
       //TO-DO
       // finish_up(trial_table,session_t, num_trials, num_rewards, app, crashed);
@@ -464,6 +563,17 @@ void sendData2Python() {
   // code de fin d'envoi de données
 }
 
+// void sendError2Python(String error) {
+//   unsigned long timeStamp;
+//   unsigned long StartTime;
+//   SerialUSB.flush();
+//   // Error
+//   SerialUSB.print('e');
+//   SerialUSB.print(error);
+//   SerialUSB.print(';');
+//   SerialUSB.println("fin");
+//   // code de fin d'envoi de données
+// }
 
 void fillBuffer() {
   // Rempli la pile temps et data et retourne la moyenne des n dernières valeurs data
@@ -492,8 +602,9 @@ void experimentOn() {
     if (SerialUSB.available() > 0) {
       serialCommand = SerialUSB.readStringUntil('\r');
     }
-    // stateMachine();
+    stateMachine();
     fillBuffer();
+    flash(2);
     delay(DL_Sampling);
     valMoyenne = avebuffer(aveOnLast);
 
@@ -502,6 +613,20 @@ void experimentOn() {
     }
   }
 }
+
+std::vector<std::string> split_string(const std::string& input_string, char delimiter) {
+    std::vector<std::string> result;
+    std::istringstream iss(input_string);
+    std::string token;
+    while (std::getline(iss, token, delimiter)) {
+        result.push_back(token);
+    }
+    return result;
+}
+
+// void getParameters() {
+
+// }
 
 // INITIALISATION-------------------------------
 void setup() {
@@ -523,15 +648,26 @@ void loop() {
   }
 
   switch (serialCommand.charAt(0)) {  // Première lettre de la commande
-
     case 'w':  // boucle defaut standby
-      digitalWrite(13, LOW);
       break;
-    case 'i':  // Initialisation : transmission des paramètres de la tâche à partir de Python
-      
+    case 'p':  // Initialisation : transmission des paramètres de la tâche à partir de Python
+      {
+        // sendError2Python("hi");
+        // sendArduino("p" + init_thresh + ";" + init_baseline + ";" + min_duration + ";" + hit_window + ";" + hit_thresh)
+      string variables;
+      variables = serialCommand.substring(1).c_str();
+      serialCommand = "";
+      std::vector<std::string> parts = split_string(variables, ';');
+      initTrial = stof(parts[0]);
+      init_thresh = stoi(parts[0]);
+      baselineTrial = stof(parts[1]);
+      duration = stof(parts[2]);
+      hit_window = stof(parts[3]);
+      hit_thresh =stof(parts[4]);
+      fastflash(2);
+      }
       break;
     case 's':  // Start
-      digitalWrite(13, HIGH);
       experimentOn();
       break;
   }
