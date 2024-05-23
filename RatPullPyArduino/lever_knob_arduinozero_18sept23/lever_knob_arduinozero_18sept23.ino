@@ -1,5 +1,5 @@
 // #include <CircularBuffer.h>
-#pragma GCC optimize ("-fexceptions")
+#pragma GCC enable ("-fexceptions")
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpsabi"
 
@@ -17,6 +17,10 @@
 using namespace std;
 
 // DECLARATION VARIABLES------------
+
+// code controllers
+bool flash_enabled = false;
+
 const int lenBuffer = 1000;
 std::deque<int> dataBuffer(lenBuffer, 0);
 // CircularBuffer<int, lenBuffer> dataBuffer;
@@ -39,16 +43,16 @@ int compteur = 0;
 String serialCommand = "wait";
 bool sendData = false;
 
-auto loop_timer = std::chrono::high_resolution_clock::now();
-auto experiment_start = std::chrono::high_resolution_clock::now();
-double pause_time;
+auto loop_timer = millis();
+auto experiment_start = millis();
+double pause_time = 0;
 //Input Parameters
 int num_rewards = 0;
 int num_trials = 0;
 int moduleValue_now = 0;
 int peak_moduleValue = 0;
-auto hold_timer = std::chrono::high_resolution_clock::now();
-auto it_timer = std::chrono::high_resolution_clock::now();
+auto hold_timer = millis();
+auto it_timer = millis();
 std::vector<std::vector<double>> tmp_value_buffer;    // [time value], first row is oldest data
 std::vector<std::vector<double>> trial_value_buffer;  // [time value]
 double duration;
@@ -68,7 +72,7 @@ double session_t;
 int moduleValue_before;
 
 bool trial_started = false;
-unsigned long trial_start_time;
+unsigned long trial_start_time = 0;
 unsigned long trial_end_time;
 unsigned long trial_time;
 bool success = false;
@@ -80,7 +84,7 @@ bool stop_session;
 bool pause_session;
 int hit_thresh;
 int hit_window;
-double failure_tolerance;
+double failure_tolerance = 100;
 double hold_time;
 double hit_thresh_max;
 double hold_time_max;
@@ -111,15 +115,20 @@ State NEXT_STATE = CURRENT_STATE;
 
 // FONCTIONS ---------------------------------
 
+double timePointToDouble(const std::chrono::time_point<std::chrono::high_resolution_clock>& tp) {
+  auto duration = tp.time_since_epoch();
+    
+  return std::chrono::duration_cast<std::chrono::duration<double>>(duration).count();
+}
 
-double timePointsToDouble(const std::chrono::time_point<std::chrono::high_resolution_clock>& start, const std::chrono::time_point<std::chrono::high_resolution_clock>& end) {
+float timePointsToDouble(const std::chrono::time_point<std::chrono::high_resolution_clock>& start, const std::chrono::time_point<std::chrono::high_resolution_clock>& end) {
   auto duration = end - start;
-  double double_duration = std::chrono::duration_cast<std::chrono::duration<double>>(duration).count();
+  float double_duration = std::chrono::duration_cast<std::chrono::duration<double>>(duration).count();
   return double_duration;
 }
 
-double getTimerDuration(const std::chrono::time_point<std::chrono::high_resolution_clock>& start) {
-  return timePointsToDouble(start, std::chrono::high_resolution_clock::now());
+double getTimerDuration(double start) {
+  return millis() - start;
 }
 
 double getMean(std::vector<double> numbers) {
@@ -136,51 +145,82 @@ double getBoolMean(deque<bool> bools) {
 }
 
 void flash(int number) {
-  int time = 350;
-  for (int i = 0; i < number; i++) {
-    digitalWrite(12, LOW);
-    digitalWrite(13, HIGH);
-    delay(time);
-    digitalWrite(13, LOW);
-    digitalWrite(12, HIGH);
-    delay(time);
-    digitalWrite(13, LOW);
-    digitalWrite(12, LOW);
+  if (flash_enabled) {
+    if (number == 0) {
+      digitalWrite(12, LOW);
+      digitalWrite(13, HIGH);
+      delay(3000);
+      digitalWrite(13, LOW);
+      digitalWrite(12, HIGH);
+      delay(3000);
+      digitalWrite(13, LOW);
+      digitalWrite(12, LOW);
+    }
+    else if (number < 0) {
+      fastflash(5);
+      digitalWrite(12, LOW);
+      digitalWrite(13, HIGH);
+      delay(3000);
+      digitalWrite(13, LOW);
+      digitalWrite(12, HIGH);
+      delay(3000);
+      digitalWrite(13, LOW);
+      digitalWrite(12, LOW);
+      fastflash(5);
+    }
+    int time = 350;
+    for (int i = 0; i < number; i++) {
+      digitalWrite(12, LOW);
+      digitalWrite(13, HIGH);
+      delay(time);
+      digitalWrite(13, LOW);
+      digitalWrite(12, HIGH);
+      delay(time);
+      digitalWrite(13, LOW);
+      digitalWrite(12, LOW);
+    }
+    delay(500);
   }
-  delay(500);
+  
 }
 void fastflash(int number) {
-  int time = 100;
-  for (int i = 0; i < number; i++) {
-    digitalWrite(12, LOW);
-    digitalWrite(13, HIGH);
-    delay(time);
-    digitalWrite(13, LOW);
-    digitalWrite(12, HIGH);
-    delay(time);
-    digitalWrite(13, LOW);
-    digitalWrite(12, LOW);
+  if (flash_enabled) {
+    int time = 100;
+    for (int i = 0; i < number; i++) {
+      digitalWrite(12, LOW);
+      digitalWrite(13, HIGH);
+      delay(time);
+      digitalWrite(13, LOW);
+      digitalWrite(12, HIGH);
+      delay(time);
+      digitalWrite(13, LOW);
+      digitalWrite(12, LOW);
+    }
+    delay(500);
   }
-  delay(500);
+  
 }
 
 void flash2Decimal(int number) {
-  int time = 300;
-  int tens = number / 10;
-  int ones = number - (tens * 10);
-  for (int i = 0; i < tens; i++) {
-    digitalWrite(12, HIGH);
-    delay(time);
-    digitalWrite(12, LOW);
-    delay(time);
+  if (flash_enabled) {
+    int time = 300;
+    int tens = number / 10;
+    int ones = number - (tens * 10);
+    for (int i = 0; i < tens; i++) {
+      digitalWrite(12, HIGH);
+      delay(time);
+      digitalWrite(12, LOW);
+      delay(time);
+    }
+    for (int i = 0; i < ones; i++) {
+      digitalWrite(13, HIGH);
+      delay(time);
+      digitalWrite(13, LOW);
+      delay(time);
+    }
+    delay(500);
   }
-  for (int i = 0; i < ones; i++) {
-    digitalWrite(13, HIGH);
-    delay(time);
-    digitalWrite(13, LOW);
-    delay(time);
-  }
-  delay(500);
+  
 }
 
 void flashfloat2Decimal(float number) {
@@ -222,15 +262,15 @@ void stateMachine() {
   }
 
   // warn if longer than expected loop delays
-  auto loop_time_duration = std::chrono::high_resolution_clock::now() - loop_timer;
-  double loop_time = std::chrono::duration_cast<std::chrono::duration<double>>(loop_time_duration).count();
+  auto loop_time = millis() - loop_timer;
   if (loop_time > 0.1) {
     // fprintf('--- WARNING --- \nlong delay in while loop (%.0f ms)\n', loop_time * 1000);
+    // send("--- WARNING --- \nlong delay in while loop");
   }
-  loop_timer = std::chrono::high_resolution_clock::now();
+  loop_timer = millis();
 
   // experiment time
-  session_t = timePointsToDouble(experiment_start, std::chrono::high_resolution_clock::now()) - pause_time;
+  session_t = millis() - experiment_start - pause_time;
   // flashfloat2Decimal(session_t);
   // app.TimeelapsedCounterLabel.Text = datestr((session_t) / 86400, 'HH:MM:SS');
   // drawnow limitrate;  // process callbacks, update figures at 20Hz max
@@ -239,7 +279,7 @@ void stateMachine() {
   moduleValue_before = moduleValue_now;    // store previous value
   moduleValue_now = analogRead(AnalogIN);  // update current value
 
-  // fill force buffer
+  // fill force buffertrial_start_time
   // limit temp buffer size to 'buffer_dur' (last 1s of data)
   // tmp_value_buffer = [tmp_value_buffer(session_t - tmp_value_buffer(:, 1) <= app.buffer_dur, :); session_t moduleValue_now];
 
@@ -254,7 +294,7 @@ void stateMachine() {
 
   if (trial_started) {
     // update trial_buffer that keeps data 1 second before trial initiation until end of trial:
-    trial_time = session_t - trial_start_time;
+    trial_time = (session_t - trial_start_time);
     vector<double> values;
     values.push_back(trial_time);
     values.push_back(moduleValue_now);
@@ -267,9 +307,10 @@ void stateMachine() {
   switch (CURRENT_STATE) {
     // STATE_IDLE
     case STATE_IDLE:
+      send("STATE_IDLE");
       flash(6);
       //removeeee
-      session_t = 0;
+      // session_t = 0;
       if (session_t > duration * 60 * 1000) {
         flash(3);
         //disp('Time Out');
@@ -294,8 +335,8 @@ void stateMachine() {
       }
 
       else {
-        fastflash(4);
         // check for trial initiation
+        fastflash(4);
         if (moduleValue_now >= init_thresh && moduleValue_before < init_thresh) {
           fastflash(8);
           // checking value before < init_thresh ensures force is increasing i.e. not already high from previous trial
@@ -305,6 +346,9 @@ void stateMachine() {
       break;
     //STATE_TRIAL_INIT
     case STATE_TRIAL_INIT:
+      send("STATE_TRIAL_INIT");
+      int s;
+      s = tmp_value_buffer.size();
       flash(8);
       // trial initiated
       trial_start_time = session_t;
@@ -329,48 +373,54 @@ void stateMachine() {
       // start recording force data (%skip last entry, it will be added below after the "if trial_started" section
 
       // trial_value_buffer = [tmp_value_buffer(1:end - 1, 1) - trial_start_time, tmp_value_buffer(1:end - 1, 2)];
-      flash(2);
-      flash(tmp_value_buffer.size());
-      delay(5000);
-      for (size_t i = 0; i < tmp_value_buffer.size() - 1; i++) {
-        try {
+      
+      flash(s);
+      flash(3);
+      if (tmp_value_buffer.size() > 0) {
+        for (size_t i = 0; i < tmp_value_buffer.size() - 1; i++) {
           flash(1);
-          double modified_value = tmp_value_buffer[i][0] - trial_start_time;
+          // double modified_value = tmp_value_buffer[i][0] - trial_start_time;
+          double h = tmp_value_buffer[i][0];
+          send(String(to_string(h).c_str()));
+          int j = i;
           fastflash(3);
-          trial_value_buffer.push_back({ modified_value, tmp_value_buffer[i][1] });
+          // trial_value_buffer.push_back({ modified_value, tmp_value_buffer[i][1] });
           fastflash(7);
-        } catch (const std::exception& e) {
-          // sendError2Python(e.what());
-        }   
-        
+        }
       }
-
+    
       NEXT_STATE = STATE_TRIAL_STARTED;
       fastflash(25);
       break;
     // STATE_TRIAL_STARTED
     case STATE_TRIAL_STARTED:
+      send("STATE_TRIAL_STARTED");
       flash(7);
       // check if trial time out (give a chance to continue if force > hit_thresh)
-      if (trial_time > hit_window && moduleValue_now < hit_thresh) {
+      if (trial_time > hit_window * 1000 && moduleValue_now < hit_thresh) {
+        send("trial_time > hit_window && moduleValue_now < hit_thresh");
         NEXT_STATE = STATE_FAILURE;
       }
       // check if force decreased from peak too much
       else if (moduleValue_now <= (peak_moduleValue - failure_tolerance)) {
+        send("moduleValue_now <= (peak_moduleValue - failure_tolerance)");
         NEXT_STATE = STATE_FAILURE;
       }
       // check if hit threshold has been reached
       else if (moduleValue_now >= hit_thresh) {
-        hold_timer = std::chrono::high_resolution_clock::now();
+        digitalWrite(13, HIGH);
+        send("moduleValue_now >= hit_thresh");
+        hold_timer = millis();
         NEXT_STATE = STATE_HOLD;
       }
       break;
     // STATE_HOLD
     case STATE_HOLD:
-
+      send("STATE_HOLD");
+      flash(9);
       //check if still in reward zone
       if (moduleValue_now < hit_thresh) {
-        hold_timer = std::chrono::high_resolution_clock::now();
+        hold_timer = millis();
         NEXT_STATE = STATE_TRIAL_STARTED;
       } else if (getTimerDuration(hold_timer) >= hold_time / 1000) {
         // convert from ms to seconds
@@ -379,6 +429,7 @@ void stateMachine() {
       break;
     // STATE_SUCCESS
     case STATE_SUCCESS:
+      send("STATE_SUCCESS");
       flash(4);
       // we have a success! execute only once
       // fprintf('trial successful! :D\n');
@@ -427,6 +478,7 @@ void stateMachine() {
       break;
     // STATE_FAILURE
     case STATE_FAILURE:
+      send("STATE_FAILURE");
       fastflash(20);
       // trial failed. execute only once
       // fprintf('trial failed :(\n');
@@ -463,6 +515,7 @@ void stateMachine() {
       break;
     // STATE_POST_TRIAL
     case STATE_POST_TRIAL:
+      send("STATE_POST_TRIAL");
       flash(5);
       // wait to accumulate a bit of post_trial data
       if (trial_time - trial_end_time >= post_trial_dur) {
@@ -472,7 +525,8 @@ void stateMachine() {
       break;
     // STATE_PARAM_UPDATE
     case STATE_PARAM_UPDATE:
-      flash(6);
+      send("STATE_PARAM_UPDATE");
+      flash(10);
       // post trial processing, execute only once.
 
       // update force plot with new trial data
@@ -493,20 +547,22 @@ void stateMachine() {
       peak_moduleValue = 0;
       success = false;
 
-      it_timer = std::chrono::high_resolution_clock::now();
+      it_timer = millis();
       NEXT_STATE = STATE_INTER_TRIAL;
       break;
     // STATE_INTER_TRIAL
     case STATE_INTER_TRIAL:
+      send("STATE_INTER_TRIAL");
       flash(12);
       // wait a short period of time between trials
       if (getTimerDuration(it_timer) >= inter_trial_dur) {
-        it_timer = std::chrono::high_resolution_clock::now();
+        it_timer = millis();
         NEXT_STATE = STATE_IDLE;
       }
 
       break;
     case STATE_SESSION_END:
+      send("STATE_SESSION_END");
       flash(5);
       //TO-DO
       // finish_up(trial_table,session_t, num_trials, num_rewards, app, crashed);
@@ -514,6 +570,7 @@ void stateMachine() {
       break;
 
     default:
+      send("default");
       fastflash(20);
       //disp('error in state machine!');
       //TO-DO
@@ -546,14 +603,16 @@ void sendData2Python() {
   unsigned long StartTime;
   SerialUSB.flush();
   // Data
-  SerialUSB.print('d');
+  String dataDelimiter = "data";
+  SerialUSB.print(dataDelimiter);
   for (int i = 0; i < dataBuffer.size(); i++) {
     SerialUSB.print(dataBuffer[i]);
     SerialUSB.print(';');
   }
   // Temps
   StartTime = LastTime - (lenBuffer * DL_Sampling);
-  SerialUSB.print('t');
+  String timeDelimiter = "time";
+  SerialUSB.print(timeDelimiter);
   for (int i = 0; i < dataBuffer.size(); i++) {
     timeStamp = StartTime + (i * DL_Sampling);
     SerialUSB.print(timeStamp);
@@ -563,17 +622,18 @@ void sendData2Python() {
   // code de fin d'envoi de données
 }
 
-// void sendError2Python(String error) {
-//   unsigned long timeStamp;
-//   unsigned long StartTime;
-//   SerialUSB.flush();
-//   // Error
-//   SerialUSB.print('e');
-//   SerialUSB.print(error);
-//   SerialUSB.print(';');
-//   SerialUSB.println("fin");
-//   // code de fin d'envoi de données
-// }
+void send(String error) {
+  unsigned long timeStamp;
+  unsigned long StartTime;
+  SerialUSB.flush();
+  // Error
+  String messageDelimiter = "message";
+  SerialUSB.print(messageDelimiter);
+  SerialUSB.print(error);
+  SerialUSB.print(';');
+  SerialUSB.println("fin");
+  // code de fin d'envoi de données
+}
 
 void fillBuffer() {
   // Rempli la pile temps et data et retourne la moyenne des n dernières valeurs data
@@ -638,9 +698,10 @@ void setup() {
   // pinMode(9,OUTPUT);
   SerialUSB.begin(115200);      // baud rate
   startArduinoProg = millis();  // début programme
-  loop_timer = std::chrono::high_resolution_clock::now();
-  experiment_start = std::chrono::high_resolution_clock::now();
+  loop_timer = millis();
+  experiment_start = millis();
 }
+
 
 void loop() {
   if (SerialUSB.available() > 0) {
@@ -652,7 +713,7 @@ void loop() {
       break;
     case 'p':  // Initialisation : transmission des paramètres de la tâche à partir de Python
       {
-        // sendError2Python("hi");
+        send("hi");
         // sendArduino("p" + init_thresh + ";" + init_baseline + ";" + min_duration + ";" + hit_window + ";" + hit_thresh)
       string variables;
       variables = serialCommand.substring(1).c_str();

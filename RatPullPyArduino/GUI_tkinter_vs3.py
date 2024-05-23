@@ -97,7 +97,9 @@ def readArduinoInput():
     global sensorTimeStamp
     global dataDeque, timeDeque
 
-    dataArray, timeArray = readArduinoLine()
+    received, dataArray, timeArray = readArduinoLine()
+    if not received:
+        return
     print("data")
     
     print(dataArray)
@@ -117,23 +119,33 @@ def readArduinoInput():
     print("timeArray len: " + str(len(timeArray)))
 
 
-
+    
     sensorValueTrial = np.vstack((sensorValueTrial, dataArray))
     sensorTimeStamp = np.vstack((sensorTimeStamp, timeArray))  # les temps pour chacun des essais
     plotData(timeArray, dataArray)
     # arduino.flushInput()  # vide le buffer en provenance de l'arduino
 
+stateList = []
+
 def readArduinoLine():
     output = arduino.readline()
     output = str(output, 'utf-8')
-    print(output)
-    if ("d" not in output or "t" not in output or "fin\r\n" not in output):
+    print("output")
+    if ("data" not in output or "time" not in output or "fin\r\n" not in output):
+        if ("message" in output):
+            output = output.removeprefix("message")
+            output = output.removesuffix(";fin\r\n")
+            stateList.append(output)
+            print("error found:")
+            print(output)
+            print(stateList)
+            return False, np.zeros(buffer_size), np.zeros(buffer_size)
         print("full input not found")
-        return np.zeros(buffer_size), np.zeros(buffer_size)
+        return False, np.zeros(buffer_size), np.zeros(buffer_size)
     else:
         print("fin was found")
     output = output.strip(';fin\r\n')  # input en 'string'. Each arduino value is separated by ';'
-    output = output.strip('d')
+    output = output.removeprefix('data')
     
     data = output.split(";t", 1)
     dataDeque.extend(data[0].split(';'))
@@ -143,7 +155,7 @@ def readArduinoLine():
     print(len(dataArray))
     print(len(timeArray))
 
-    return dataArray, timeArray
+    return True, dataArray, timeArray
 
 
 
