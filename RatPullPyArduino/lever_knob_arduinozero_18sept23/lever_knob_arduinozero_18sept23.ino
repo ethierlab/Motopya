@@ -141,6 +141,8 @@ double getBoolMean(deque<bool> bools) {
   double sum = std::accumulate(bools.begin(), bools.end(), 0.0);
 
   double average = sum / bools.size();
+  send("average");
+  send(String(average));
   return average;
 }
 
@@ -376,18 +378,21 @@ void stateMachine() {
       
       flash(s);
       flash(3);
-      if (tmp_value_buffer.size() > 0) {
-        for (size_t i = 0; i < tmp_value_buffer.size() - 1; i++) {
-          flash(1);
-          // double modified_value = tmp_value_buffer[i][0] - trial_start_time;
-          double h = tmp_value_buffer[i][0];
-          send(String(to_string(h).c_str()));
-          int j = i;
-          fastflash(3);
-          // trial_value_buffer.push_back({ modified_value, tmp_value_buffer[i][1] });
-          fastflash(7);
-        }
-      }
+      trial_value_buffer.clear();
+      std::transform(tmp_value_buffer.begin(), tmp_value_buffer.end(), std::back_inserter(trial_value_buffer), [](std::vector<double> sublist) { sublist[0] -= trial_start_time; return sublist; });
+      // if (tmp_value_buffer.size() > 0) {
+      //   for (size_t i = 0; i < tmp_value_buffer.size() - 1; i++) {
+      //     flash(1);
+      //     double modified_value = tmp_value_buffer[i][0] - trial_start_time;
+      //     double h = tmp_value_buffer[i][0];
+      //     send(String(to_string(h).c_str()));
+      //     int j = i;
+      //     fastflash(3);
+          
+      //     trial_value_buffer.push_back({ modified_value, tmp_value_buffer[i][1] });
+      //     fastflash(7);
+      //   }
+      // }
     
       NEXT_STATE = STATE_TRIAL_STARTED;
       fastflash(25);
