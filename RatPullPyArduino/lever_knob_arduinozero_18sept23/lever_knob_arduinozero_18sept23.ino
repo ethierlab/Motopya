@@ -76,7 +76,6 @@ unsigned long trial_start_time = 0;
 unsigned long trial_end_time;
 unsigned long trial_time;
 bool success = false;
-// std::list<std::list<double>> trial_value_buffer; // Assuming buffer size is 2x2
 bool crashed = false;  // Assuming this variable is declared elsewhere
 int duration_minutes;  // Assuming app.duration.Value is in minutes
 int max_trial_num;
@@ -273,7 +272,6 @@ void stateMachine() {
 
   // experiment time
   session_t = millis() - experiment_start - pause_time;
-  // flashfloat2Decimal(session_t);
   // app.TimeelapsedCounterLabel.Text = datestr((session_t) / 86400, 'HH:MM:SS');
   // drawnow limitrate;  // process callbacks, update figures at 20Hz max
 
@@ -282,7 +280,7 @@ void stateMachine() {
   moduleValue_now = analogRead(AnalogIN);  // update current value
 
   // fill force buffertrial_start_time
-  // limit temp buffer size to 'buffer_dur' (last 1s of data)
+  // limit temp buffer size to 'buffer_dur' (last 1s of data)+
   // tmp_value_buffer = [tmp_value_buffer(session_t - tmp_value_buffer(:, 1) <= app.buffer_dur, :); session_t moduleValue_now];
 
   auto condition = [&](const std::vector<double>& row) {
@@ -291,6 +289,7 @@ void stateMachine() {
 
   std::vector<std::vector<double>> filtered_rows;
   std::copy_if(tmp_value_buffer.begin(), tmp_value_buffer.end(), std::back_inserter(filtered_rows), condition);
+  filtered_rows.push_back({session_t, moduleValue_now});
   tmp_value_buffer = filtered_rows;
 
 
@@ -311,28 +310,21 @@ void stateMachine() {
     case STATE_IDLE:
       send("STATE_IDLE");
       flash(6);
-      //removeeee
-      // session_t = 0;
       if (session_t > duration * 60 * 1000) {
         flash(3);
-        //disp('Time Out');
+        send(String('Time Out'));
         NEXT_STATE = STATE_SESSION_END;
       }
-      // if (session_t > duration * 60) {
-      //   flash(3);
-      //   //disp('Time Out');
-      //   NEXT_STATE = STATE_SESSION_END;
-      // }
 
       else if (num_trials >= MaxTrialNum) {
         flash(4);
-        //disp('Reached Maximum Number of Trials');
+        send("Reached Maximum Number of Trials");
         NEXT_STATE = STATE_SESSION_END;
       }
 
       else if (stop_session) {
         flash(5);
-        //disp('Manual Stop')
+        send("Manual Stop");
         NEXT_STATE = STATE_SESSION_END;
       }
 
@@ -349,12 +341,10 @@ void stateMachine() {
     //STATE_TRIAL_INIT
     case STATE_TRIAL_INIT:
       send("STATE_TRIAL_INIT");
-      int s;
-      s = tmp_value_buffer.size();
       flash(8);
       // trial initiated
       trial_start_time = session_t;
-      //disp('Trial initiated... ');
+      send("Trial initiated... ");
       // play(init_sound{1});
       trial_started = true;
       num_trials = num_trials + 1;
@@ -372,27 +362,11 @@ void stateMachine() {
       //TODO
       // app.moto.stim();
 
-      // start recording force data (%skip last entry, it will be added below after the "if trial_started" section
-
+      
       // trial_value_buffer = [tmp_value_buffer(1:end - 1, 1) - trial_start_time, tmp_value_buffer(1:end - 1, 2)];
       
-      flash(s);
-      flash(3);
-      trial_value_buffer.clear();
-      std::transform(tmp_value_buffer.begin(), tmp_value_buffer.end(), std::back_inserter(trial_value_buffer), [](std::vector<double> sublist) { sublist[0] -= trial_start_time; return sublist; });
-      // if (tmp_value_buffer.size() > 0) {
-      //   for (size_t i = 0; i < tmp_value_buffer.size() - 1; i++) {
-      //     flash(1);
-      //     double modified_value = tmp_value_buffer[i][0] - trial_start_time;
-      //     double h = tmp_value_buffer[i][0];
-      //     send(String(to_string(h).c_str()));
-      //     int j = i;
-      //     fastflash(3);
-          
-      //     trial_value_buffer.push_back({ modified_value, tmp_value_buffer[i][1] });
-      //     fastflash(7);
-      //   }
-      // }
+      // start recording force data (%skip last entry, it will be added below after the "if trial_started" section
+      std::transform(tmp_value_buffer.begin(), tmp_value_buffer.end() - 1, std::back_inserter(trial_value_buffer), [](std::vector<double> sublist) { sublist[0] -= trial_start_time; return sublist; });
     
       NEXT_STATE = STATE_TRIAL_STARTED;
       fastflash(25);
@@ -538,6 +512,9 @@ void stateMachine() {
 
       //TODO
 
+      //should include trial_value_buffer data, first and second column, and a maximum (maybe), number of trials, trial start time, initial threshold, hit threshold, trial_value_buffer,
+      //hold  time, trial end time, success, peak_moduleValue
+      sendTrialData2Python();
       // set(app.force_line, 'XData', trial_value_buffer(:, 1), ...
       //     'YData', trial_value_buffer(:, 2),'Visible','on');
       // ymax = max(app.hit_thresh.Value, peak_moduleValue) * 1.25;
@@ -577,7 +554,7 @@ void stateMachine() {
     default:
       send("default");
       fastflash(20);
-      //disp('error in state machine!');
+      send("error in state machine!");
       //TO-DO
       // finish_up(trial_table,session_t, num_trials, num_rewards, app, crashed);
       // exit while loop
@@ -588,8 +565,57 @@ void stateMachine() {
 }
 
 // void finish_up(trial_table, session_t, num_trials, num_rewards, app, crashed) {
-//   //TO-DO
+// //   //TO-DO
+//     send('Session Ended');
+    
+//     //reset the gui buttons
+//     // reset_buttons(app);
+
+//     // trial_table = trial_table(1:num_trials, :);  
+//     // trial_table.Properties.CustomProperties.num_trials  = num_trials;
+//     // trial_table.Properties.CustomProperties.num_rewards = num_rewards;
+//     // trial_table.Properties.CustomProperties.rat_id      = app.rat_id.Value;
+//     // display_results(session_t, num_trials, num_rewards, app.num_pellets, app.man_pellets);
+//     // save_results(app, trial_table, crashed);
 // }
+
+  // void save_results(app, trial_table, bool crashed) {
+        // if (crashed) {
+        //       SaveButton = questdlg(sprintf('RatPull lever_pull_behavior Crashed!\n Save results?'), 'Sorry about that...', 'Yes','No','Yes');
+        //}
+        //else {
+        //SaveButton = questdlg(sprintf('End of behavioral session\nSave results?'), 'End of Session', 'Yes','No','Yes');
+        //}
+        
+    //     if (SaveButton.compare('Yes'))
+    //         dir_exist = isfolder(fullfile(app.params.save_dir,app.rat_id.Value));
+    //         if ~dir_exist
+    //             fprintf('Creating new folder for animal %s\n',app.rat_id.Value);
+    //             dir_exist = mkdir(app.params.save_dir,app.rat_id.Value);
+    //             if ~dir_exist
+    //                 disp('Failed to create new folder in specifiec location');
+    //             end
+    //         end
+        
+    //         if dir_exist
+    //             ttfname = [app.rat_id.Value,'_RatPull_trial_table_',datestr(datetime('now'),'yyyymmdd_HHMMSS'),'.mat'];
+    //             pfname  = [app.rat_id.Value,'_RatPull_params_',datestr(datetime('now'),'yyyymmdd_HHMMSS'),'.mat'];
+
+    //             params = app.params;
+    //             save(fullfile(app.params.save_dir, app.rat_id.Value, ttfname), 'trial_table');
+    //             save(fullfile(app.params.save_dir, app.rat_id.Value, pfname), '-Struct', 'params');
+
+    //             disp('behavior stats and parameters saved successfully');
+        
+    //             update_global_stats(app,trial_table);
+    //         else
+    //             disp('behavior stats and parameters not saved');
+    //         end
+        
+    //     end
+  // }
+
+
 float avebuffer(int aveOnLast) {
   // sort la moyenne des x derniers
   float ave = 0.0;
@@ -600,6 +626,43 @@ float avebuffer(int aveOnLast) {
   return ave;
 }
 
+void sendTrialData2Python() {
+  //should include trial_value_buffer data, first and second column, and a maximum (maybe), number of trials, trial start time, initial threshold, hit threshold, trial_value_buffer,
+  //hold  time, trial end time, success, peak_moduleValue
+  // envoie les données de l'essai : sous la forme ##;##;##;...fin et
+  // la forme temps correspondant en seconde ligne
+  unsigned long timeStamp;
+  unsigned long StartTime;
+  SerialUSB.flush();
+  // Data
+  String dataDelimiter = "trialData";
+  SerialUSB.print(dataDelimiter);
+  for (int i = 0; i < trial_value_buffer.size(); i++) {
+    SerialUSB.print(trial_value_buffer[i][0]);
+    SerialUSB.print('/');
+    SerialUSB.print(trial_value_buffer[i][1]);
+    SerialUSB.print(';');
+  }
+  SerialUSB.print("nt");
+  SerialUSB.print(String(num_trials));
+  SerialUSB.print("ts");
+  SerialUSB.print(String(trial_start_time));
+  SerialUSB.print("it");
+  SerialUSB.print(String(init_thresh));
+  SerialUSB.print("hth");
+  SerialUSB.print(String(num_trials));
+  SerialUSB.print("ht");
+  SerialUSB.print(String(hit_thresh));
+  SerialUSB.print("te");
+  SerialUSB.print(String(trial_end_time));
+  SerialUSB.print("s");
+  SerialUSB.print(String(success));
+  SerialUSB.print("pk");
+  SerialUSB.print(String(peak_moduleValue));
+
+  SerialUSB.println("fin");
+  // code de fin d'envoi de données
+}
 
 void sendData2Python() {
   // envoie les données de l'essai : sous la forme ##;##;##;...fin et
@@ -668,14 +731,14 @@ void experimentOn() {
       serialCommand = SerialUSB.readStringUntil('\r');
     }
     stateMachine();
-    fillBuffer();
-    flash(2);
-    delay(DL_Sampling);
-    valMoyenne = avebuffer(aveOnLast);
+    // fillBuffer();
+    // flash(2);
+    // delay(DL_Sampling);
+    // valMoyenne = avebuffer(aveOnLast);
 
-    if (valMoyenne > initTrial) {
-      sendData2Python();
-    }
+    // if (valMoyenne > initTrial) {
+    //   sendData2Python();
+    // }
   }
 }
 
@@ -688,11 +751,6 @@ std::vector<std::string> split_string(const std::string& input_string, char deli
     }
     return result;
 }
-
-// void getParameters() {
-
-// }
-
 // INITIALISATION-------------------------------
 void setup() {
   // put your setup code here, to run once:

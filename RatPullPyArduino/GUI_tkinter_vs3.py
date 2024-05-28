@@ -9,7 +9,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import pandas as pd
 from tkinter.filedialog import askopenfilename
 import serial.tools.list_ports
 import sys
@@ -78,7 +77,8 @@ Cadre6 = Frame(top)
 Cadre6.grid(row=2, column=2)
 
 Title_array = Label(Cadre6, text="Knob Rotation Angle").grid(row=1, column=1, columnspan=2, pady=2)
-fig = plt.Figure(figsize=(3, 2), dpi=211, layout='constrained')
+# fig = plt.Figure(figsize=(3, 2), dpi=211, layout='constrained')
+fig = plt.Figure(figsize=(3, 2), dpi=211)
 ax = fig.add_subplot(111)
 canvas = FigureCanvasTkAgg(fig, master=Cadre6)  # tk.DrawingArea.
 canvas.get_tk_widget().grid(row=1, column=1, columnspan=2, sticky='E', pady=2)
@@ -131,31 +131,46 @@ def readArduinoLine():
     output = arduino.readline()
     output = str(output, 'utf-8')
     print("output")
-    if ("data" not in output or "time" not in output or "fin\r\n" not in output):
-        if ("message" in output):
-            output = output.removeprefix("message")
-            output = output.removesuffix(";fin\r\n")
-            stateList.append(output)
-            print("error found:")
-            print(output)
-            print(stateList)
-            return False, np.zeros(buffer_size), np.zeros(buffer_size)
-        print("full input not found")
+    if ("data" in output and "time" in output and "fin\r\n" in output):
+        output = output.strip(';fin\r\n')  # input en 'string'. Each arduino value is separated by ';'
+        output = output.removeprefix('data')
+        
+        data = output.split(";t", 1)
+        dataDeque.extend(data[0].split(';'))
+        timeDeque.extend(data[1].split(';'))
+        dataArray = np.array(dataDeque).astype(float)
+        timeArray = np.array(timeDeque).astype(float)
+        print(len(dataArray))
+        print(len(timeArray))
+        return True, dataArray, timeArray
+    elif ("trialData" in output and "fin\r\n" in output):
+        output = output.strip(';fin\r\n')  # input en 'string'. Each arduino value is separated by ';'
+        output = output.removeprefix('trialData')
+        
+        data = output.split(";nt", 1)
+        trial_data = data[0].split(";")
+        for pair in trial_data:
+            if pair:  # Ignore empty strings
+                time, value = pair.split('/')
+                dataDeque.extend(time)
+                timeDeque.extend(value)
+        dataArray = np.array(dataDeque).astype(float)
+        timeArray = np.array(timeDeque).astype(float)
+        print(len(dataArray))
+        print(len(timeArray))
+        return True, dataArray, timeArray
+    elif ("message" in output):
+        output = output.removeprefix("message")
+        output = output.removesuffix(";fin\r\n")
+        stateList.append(output)
+        print("error found:")
+        print(output)
+        print(stateList)
         return False, np.zeros(buffer_size), np.zeros(buffer_size)
     else:
-        print("fin was found")
-    output = output.strip(';fin\r\n')  # input en 'string'. Each arduino value is separated by ';'
-    output = output.removeprefix('data')
+        print("full input not found")
+        return False, np.zeros(buffer_size), np.zeros(buffer_size)
     
-    data = output.split(";t", 1)
-    dataDeque.extend(data[0].split(';'))
-    timeDeque.extend(data[1].split(';'))
-    dataArray = np.array(dataDeque).astype(float)
-    timeArray = np.array(timeDeque).astype(float)
-    print(len(dataArray))
-    print(len(timeArray))
-
-    return True, dataArray, timeArray
 
 
 
