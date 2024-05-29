@@ -44,7 +44,7 @@ String serialCommand = "wait";
 bool sendData = false;
 
 auto loop_timer = millis();
-auto experiment_start = millis();
+long experiment_start;
 double pause_time = 0;
 //Input Parameters
 int num_rewards = 0;
@@ -92,7 +92,7 @@ bool adapt_hold_time;
 bool adapt_drop_tolerance;
 int post_trial_dur;
 int inter_trial_dur;
-double buffer_dur = 1;
+double buffer_dur = 1000;
 
 
 // Define STATES
@@ -295,7 +295,11 @@ void stateMachine() {
 
   if (trial_started) {
     // update trial_buffer that keeps data 1 second before trial initiation until end of trial:
-    trial_time = (session_t - trial_start_time);
+    sendSpec("trial started");
+    sendSpec(String(trial_time));
+    trial_time = session_t - trial_start_time;
+    send(String(session_t));
+    send(String(trial_start_time));
     vector<double> values;
     values.push_back(trial_time);
     values.push_back(moduleValue_now);
@@ -366,7 +370,19 @@ void stateMachine() {
       // trial_value_buffer = [tmp_value_buffer(1:end - 1, 1) - trial_start_time, tmp_value_buffer(1:end - 1, 2)];
       
       // start recording force data (%skip last entry, it will be added below after the "if trial_started" section
-      std::transform(tmp_value_buffer.begin(), tmp_value_buffer.end() - 1, std::back_inserter(trial_value_buffer), [](std::vector<double> sublist) { sublist[0] -= trial_start_time; return sublist; });
+      std::transform(tmp_value_buffer.begin(), tmp_value_buffer.end() - 1, std::back_inserter(trial_value_buffer), [](std::vector<double> sublist) { 
+        vector<double> sublist2;
+        sublist2.push_back(sublist[0] - trial_start_time);
+        sublist2.push_back(sublist[1]);
+        // sublist[0] -= trial_start_time; 
+        return sublist2; 
+        });
+
+      for (int i = 0; i < trial_value_buffer.size(); i++) {
+        sendSpec("trial from tmp with subtraction");
+        sendSpec(String(trial_value_buffer[i][0]));
+        sendSpec(String(trial_value_buffer[i][1]));
+      }
     
       NEXT_STATE = STATE_TRIAL_STARTED;
       fastflash(25);
@@ -383,6 +399,7 @@ void stateMachine() {
       // check if force decreased from peak too much
       else if (moduleValue_now <= (peak_moduleValue - failure_tolerance)) {
         send("moduleValue_now <= (peak_moduleValue - failure_tolerance)");
+        send(String(peak_moduleValue));
         NEXT_STATE = STATE_FAILURE;
       }
       // check if hit threshold has been reached
@@ -526,6 +543,7 @@ void stateMachine() {
 
       // reset data buffer
       trial_value_buffer.clear();
+      tmp_value_buffer.clear();
       peak_moduleValue = 0;
       success = false;
 
@@ -661,6 +679,8 @@ void sendTrialData2Python() {
   SerialUSB.print(String(peak_moduleValue));
 
   SerialUSB.println("fin");
+  trial_value_buffer.clear();
+  tmp_value_buffer.clear();
   // code de fin d'envoi de données
 }
 
@@ -703,6 +723,19 @@ void send(String error) {
   // code de fin d'envoi de données
 }
 
+void sendSpec(String error) {
+  unsigned long timeStamp;
+  unsigned long StartTime;
+  SerialUSB.flush();
+  // Error
+  String messageDelimiter = "yumm";
+  SerialUSB.print(messageDelimiter);
+  SerialUSB.print(error);
+  SerialUSB.print(';');
+  SerialUSB.println("fin");
+  // code de fin d'envoi de données
+}
+
 void fillBuffer() {
   // Rempli la pile temps et data et retourne la moyenne des n dernières valeurs data
 
@@ -726,14 +759,14 @@ void experimentOn() {
   initTrial = serialCommand.substring(1, posIndice).toFloat();
   baselineTrial = serialCommand.substring(posIndice + 1).toFloat();
   while (serialCommand.charAt(0) == 's') {
-    delay(5);
+    fastflash(5);
+    delay(50);
     if (SerialUSB.available() > 0) {
       serialCommand = SerialUSB.readStringUntil('\r');
     }
     stateMachine();
     // fillBuffer();
-    // flash(2);
-    // delay(DL_Sampling);
+    // // delay(DL_Sampling);
     // valMoyenne = avebuffer(aveOnLast);
 
     // if (valMoyenne > initTrial) {

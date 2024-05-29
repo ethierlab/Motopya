@@ -42,6 +42,14 @@ arduino = serial.Serial(port_found, 115211)
 t.sleep(1)
 arduino.flushInput()  # vide le buffer en provenance de l'arduino
 
+try:
+    cmd = "testing" + '\r'
+    arduino.write(cmd.encode())
+    arduino.reset_output_buffer()
+    print("hi")
+except Exception as e:
+    print("An error occurred:", e)
+
 # création de l'interface avec titre et taille de la fenêtre
 top = Tk()
 top.title("Moto Knob Controller")
@@ -61,7 +69,7 @@ hitThresh = StringVar(top)
 # variables
 
 global buffer_size
-buffer_size = 25
+buffer_size = 5000
 
 dataDeque = deque([0] * buffer_size, maxlen=buffer_size)
 timeDeque = deque([0] * buffer_size, maxlen=buffer_size) 
@@ -83,6 +91,43 @@ ax = fig.add_subplot(111)
 canvas = FigureCanvasTkAgg(fig, master=Cadre6)  # tk.DrawingArea.
 canvas.get_tk_widget().grid(row=1, column=1, columnspan=2, sticky='E', pady=2)
 
+def connectArduino():
+    global arduino
+    arduino.close()
+    ports = serial.tools.list_ports.comports()
+    port_found = None
+    for port in ports:
+        print("Port:", port.device)
+        print("Description:", port.description)
+        print("Hardware ID:", port.hwid)
+        print("Manufacturer:", port.manufacturer)
+        print("Product:", port.product)
+        print("Serial Number:", port.serial_number)
+        print("===================================")
+        
+        if "arduino" in port.description.lower():
+            print(port.description.lower())
+            description = port.description
+            print(description)
+            port_found = port.device
+    if port_found == None:
+        print("Arduino not found")
+        sys.exit()
+    else:
+        print(f"Arduino found at port {port_found} in description {description}")
+
+    
+    # Serial communication
+
+    arduino = serial.Serial(port_found, 115211)
+    t.sleep(1)
+    arduino.flushInput()  # vide le buffer en provenance de l'arduino
+
+    try:
+        sendArduino("testing")
+    except Exception as e:
+        print("An error occurred:", e)
+        
 
 # Boutons de contrôle____________________________________________________________
 def sendArduino(text):
@@ -101,8 +146,7 @@ def readArduinoInput():
     if not received:
         return
     print("data")
-    
-    print(dataArray)
+
     if (len(dataArray) < buffer_size):
         dataArray = np.pad(dataArray, (0,  (buffer_size - len(dataArray))), mode="constant")
     elif (len(dataArray) > buffer_size):
@@ -120,8 +164,8 @@ def readArduinoInput():
 
 
     
-    sensorValueTrial = np.vstack((sensorValueTrial, dataArray))
-    sensorTimeStamp = np.vstack((sensorTimeStamp, timeArray))  # les temps pour chacun des essais
+    # sensorValueTrial = np.vstack((sensorValueTrial, dataArray))
+    # sensorTimeStamp = np.vstack((sensorTimeStamp, timeArray))  # les temps pour chacun des essais
     plotData(timeArray, dataArray)
     # arduino.flushInput()  # vide le buffer en provenance de l'arduino
 
@@ -129,8 +173,9 @@ stateList = []
 
 def readArduinoLine():
     output = arduino.readline()
+    # print(output)
     output = str(output, 'utf-8')
-    print("output")
+    
     if ("data" in output and "time" in output and "fin\r\n" in output):
         output = output.strip(';fin\r\n')  # input en 'string'. Each arduino value is separated by ';'
         output = output.removeprefix('data')
@@ -140,8 +185,6 @@ def readArduinoLine():
         timeDeque.extend(data[1].split(';'))
         dataArray = np.array(dataDeque).astype(float)
         timeArray = np.array(timeDeque).astype(float)
-        print(len(dataArray))
-        print(len(timeArray))
         return True, dataArray, timeArray
     elif ("trialData" in output and "fin\r\n" in output):
         output = output.strip(';fin\r\n')  # input en 'string'. Each arduino value is separated by ';'
@@ -149,23 +192,34 @@ def readArduinoLine():
         
         data = output.split(";nt", 1)
         trial_data = data[0].split(";")
+        dataDeque = deque([0] * buffer_size, maxlen=buffer_size)
+        timeDeque = deque([0] * buffer_size, maxlen=buffer_size) 
         for pair in trial_data:
             if pair:  # Ignore empty strings
                 time, value = pair.split('/')
-                dataDeque.extend(time)
-                timeDeque.extend(value)
+                dataDeque.extend([value])
+                timeDeque.extend([time])
+        print(output)
         dataArray = np.array(dataDeque).astype(float)
         timeArray = np.array(timeDeque).astype(float)
-        print(len(dataArray))
-        print(len(timeArray))
+        for i in range(len(timeArray)):
+            if timeArray[i] != 0.0:
+
+                print(timeArray[i])
+                print(dataArray[i])
+        print(timeArray)
         return True, dataArray, timeArray
     elif ("message" in output):
         output = output.removeprefix("message")
         output = output.removesuffix(";fin\r\n")
         stateList.append(output)
-        print("error found:")
+        # print(stateList[-1])
+        return False, np.zeros(buffer_size), np.zeros(buffer_size)
+    elif ("yumm" in output):
+        output = output.removeprefix("yumm")
+        output = output.removesuffix(";fin\r\n")
+        print("spec")
         print(output)
-        print(stateList)
         return False, np.zeros(buffer_size), np.zeros(buffer_size)
     else:
         print("full input not found")
@@ -194,17 +248,21 @@ def plotData(time_Array, data_Array):
     # axeTempRel
     global max_force
     
-    axeTempRel = (time_Array - time_Array.min()) / 1000
+    # axeTempRel = (time_Array - time_Array.min()) / 1000
+    axeTempRel = (time_Array) / 1000
+    min_time = axeTempRel.min()
     max_time = axeTempRel.max()
     print(max_time)
     print(axeTempRel)
 
     ax.clear()
+    canvas.draw()
+    canvas.flush_events()
 
     max_force = data_Array.max() if data_Array.max() >= max_force else max_force
     ax.plot(axeTempRel, data_Array, linewidth=0.5)
     
-    ticks = np.arange(0, max_time, .5)
+    ticks = np.arange(min_time, max_time, .5)
     ax.set_xticks(ticks)
     ticks = np.arange(0, max_force + 100, 100)
     ax.set_yticks(ticks)
@@ -277,7 +335,7 @@ Cadre1.grid(row=1, column=1)
 
 # Boutons de tests_______________________________________________________________
 Title = Label(Cadre1, text="Moto Track", fg='blue', justify=CENTER, font=Gras).grid(row=1, column=2)
-Connect = Button(Cadre1, text="Connect\nMoto Track").grid(row=1, column=5)
+Connect = Button(Cadre1, text="Connect\nMoto Track", command=connectArduino).grid(row=1, column=5)
 Retract = Button(Cadre1, text="Retract\nSensor At Pos", state=DISABLED).grid(row=2, column=5)
 
 # infos sur le rat et la sauvegarde des données
