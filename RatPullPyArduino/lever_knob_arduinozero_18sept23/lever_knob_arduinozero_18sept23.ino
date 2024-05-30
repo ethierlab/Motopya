@@ -21,7 +21,7 @@ using namespace std;
 // code controllers
 bool flash_enabled = false;
 
-const int lenBuffer = 1000;
+const int lenBuffer = 255;
 std::deque<int> dataBuffer(lenBuffer, 0);
 // CircularBuffer<int, lenBuffer> dataBuffer;
 int AnalogIN = A0;
@@ -45,7 +45,7 @@ bool sendData = false;
 
 auto loop_timer = millis();
 long experiment_start;
-double pause_time = 0;
+int pause_time = 0;
 //Input Parameters
 int num_rewards = 0;
 int num_trials = 0;
@@ -53,12 +53,12 @@ int moduleValue_now = 0;
 int peak_moduleValue = 0;
 auto hold_timer = millis();
 auto it_timer = millis();
-std::vector<std::vector<double>> tmp_value_buffer;    // [time value], first row is oldest data
-std::vector<std::vector<double>> trial_value_buffer;  // [time value]
-double duration;
-int MaxTrialNum = 10;
-double hold_time_min;
-double hit_thresh_min;
+std::vector<std::vector<int>> tmp_value_buffer;    // [time value], first row is oldest data
+std::vector<std::vector<int>> trial_value_buffer;  // [time value]
+int duration;
+int MaxTrialNum = 100;
+int hold_time_min = 0;
+int hit_thresh_min;
 
 //Initial Parameters
 int num_pellets = 0;
@@ -66,15 +66,16 @@ std::deque<bool> past_10_trials_succ;
 
 
 int init_thresh = 0;
-double session_t;
+int session_t;
+int session_t_before = 0;
 
 
-int moduleValue_before;
+int moduleValue_before = 0;
 
 bool trial_started = false;
-unsigned long trial_start_time = 0;
-unsigned long trial_end_time;
-unsigned long trial_time;
+int trial_start_time = 0;
+int trial_end_time;
+int trial_time;
 bool success = false;
 bool crashed = false;  // Assuming this variable is declared elsewhere
 int duration_minutes;  // Assuming app.duration.Value is in minutes
@@ -83,16 +84,16 @@ bool stop_session;
 bool pause_session;
 int hit_thresh;
 int hit_window;
-double failure_tolerance = 100;
-double hold_time;
-double hit_thresh_max;
-double hold_time_max;
+int failure_tolerance = 100;
+int hold_time = 50;
+int hit_thresh_max;
+int hold_time_max = 1000;
 bool adapt_hit_thresh;
 bool adapt_hold_time;
 bool adapt_drop_tolerance;
-int post_trial_dur;
-int inter_trial_dur;
-double buffer_dur = 1000;
+int post_trial_dur = 1000;
+int inter_trial_dur = 500;
+int buffer_dur = 1000;
 
 
 // Define STATES
@@ -114,34 +115,20 @@ State NEXT_STATE = CURRENT_STATE;
 
 // FONCTIONS ---------------------------------
 
-double timePointToDouble(const std::chrono::time_point<std::chrono::high_resolution_clock>& tp) {
-  auto duration = tp.time_since_epoch();
-    
-  return std::chrono::duration_cast<std::chrono::duration<double>>(duration).count();
-}
-
-float timePointsToDouble(const std::chrono::time_point<std::chrono::high_resolution_clock>& start, const std::chrono::time_point<std::chrono::high_resolution_clock>& end) {
-  auto duration = end - start;
-  float double_duration = std::chrono::duration_cast<std::chrono::duration<double>>(duration).count();
-  return double_duration;
-}
-
-double getTimerDuration(double start) {
+int getTimerDuration(int start) {
   return millis() - start;
 }
 
-double getMean(std::vector<double> numbers) {
-  double sum = std::accumulate(numbers.begin(), numbers.end(), 0.0);
+int getMean(std::vector<int> numbers) {
+  int sum = std::accumulate(numbers.begin(), numbers.end(), 0.0);
 
-  double average = sum / numbers.size();
+  int average = sum / numbers.size();
   return average;
 }
-double getBoolMean(deque<bool> bools) {
-  double sum = std::accumulate(bools.begin(), bools.end(), 0.0);
+int getBoolMean(deque<bool> bools) {
+  int sum = std::accumulate(bools.begin(), bools.end(), 0.0);
 
-  double average = sum / bools.size();
-  send("average");
-  send(String(average));
+  int average = sum / bools.size();
   return average;
 }
 
@@ -254,6 +241,25 @@ void flashfloat2Decimal(float number) {
   delay(500);
 }
 
+void recordCurrentValue() {
+    // update trial_buffer that keeps data 1 second before trial initiation until end of trial:
+    if (trial_value_buffer.size() >= lenBuffer) {
+      trial_value_buffer.erase(trial_value_buffer.begin());
+    }
+    trial_time = session_t - trial_start_time;
+    vector<int> values;
+    values.push_back(trial_time);
+    //using before value, because the state before is what decides to start the trial
+    values.push_back(moduleValue_now);
+    trial_value_buffer.push_back(values);
+
+    send(String(trial_value_buffer.size()));
+    send(String(tmp_value_buffer.size()));
+    // and keep track of trial peak force
+    peak_moduleValue = max(peak_moduleValue, moduleValue_now);
+}
+
+
 void stateMachine() {
   if (pause_session) {
     //%accumulate pause_time (in app code) and skip state machine
@@ -266,11 +272,12 @@ void stateMachine() {
   auto loop_time = millis() - loop_timer;
   if (loop_time > 0.1) {
     // fprintf('--- WARNING --- \nlong delay in while loop (%.0f ms)\n', loop_time * 1000);
-    // send("--- WARNING --- \nlong delay in while loop");
+    // send("--- WARNING --- \nlong delay in while loop"); // tmp_value_buffer
   }
   loop_timer = millis();
 
   // experiment time
+  session_t_before = session_t;
   session_t = millis() - experiment_start - pause_time;
   // app.TimeelapsedCounterLabel.Text = datestr((session_t) / 86400, 'HH:MM:SS');
   // drawnow limitrate;  // process callbacks, update figures at 20Hz max
@@ -283,72 +290,63 @@ void stateMachine() {
   // limit temp buffer size to 'buffer_dur' (last 1s of data)+
   // tmp_value_buffer = [tmp_value_buffer(session_t - tmp_value_buffer(:, 1) <= app.buffer_dur, :); session_t moduleValue_now];
 
-  auto condition = [&](const std::vector<double>& row) {
+  auto condition = [&](const std::vector<int>& row) {
     return session_t - row[0] <= buffer_dur;
   };
 
-  std::vector<std::vector<double>> filtered_rows;
+  std::vector<std::vector<int>> filtered_rows;
   std::copy_if(tmp_value_buffer.begin(), tmp_value_buffer.end(), std::back_inserter(filtered_rows), condition);
+  if (filtered_rows.size() >= lenBuffer) {
+    filtered_rows.erase(trial_value_buffer.begin());
+  }
   filtered_rows.push_back({session_t, moduleValue_now});
+  
   tmp_value_buffer = filtered_rows;
 
-
-  if (trial_started) {
-    // update trial_buffer that keeps data 1 second before trial initiation until end of trial:
-    sendSpec("trial started");
-    sendSpec(String(trial_time));
-    trial_time = session_t - trial_start_time;
-    send(String(session_t));
-    send(String(trial_start_time));
-    vector<double> values;
-    values.push_back(trial_time);
-    values.push_back(moduleValue_now);
-    trial_value_buffer.push_back(values);
-
-    // and keep track of trial peak force
-    peak_moduleValue = max(peak_moduleValue, moduleValue_now);
-  }
+  
   // STATE MACHINE
   switch (CURRENT_STATE) {
     // STATE_IDLE
     case STATE_IDLE:
-      send("STATE_IDLE");
-      flash(6);
+      // send("STATE_IDLE");
       if (session_t > duration * 60 * 1000) {
-        flash(3);
         send(String('Time Out'));
         NEXT_STATE = STATE_SESSION_END;
       }
 
       else if (num_trials >= MaxTrialNum) {
-        flash(4);
-        send("Reached Maximum Number of Trials");
+        // send("Reached Maximum Number of Trials");
         NEXT_STATE = STATE_SESSION_END;
       }
 
       else if (stop_session) {
-        flash(5);
-        send("Manual Stop");
+        // send("Manual Stop");
         NEXT_STATE = STATE_SESSION_END;
       }
 
       else {
         // check for trial initiation
-        fastflash(4);
         if (moduleValue_now >= init_thresh && moduleValue_before < init_thresh) {
-          fastflash(8);
           // checking value before < init_thresh ensures force is increasing i.e. not already high from previous trial
           NEXT_STATE = STATE_TRIAL_INIT;
+
+
+          //changes from original state machine
+          trial_start_time = session_t;
+
+          trial_started = true;
         }
       }
       break;
     //STATE_TRIAL_INIT
     case STATE_TRIAL_INIT:
       send("STATE_TRIAL_INIT");
-      flash(8);
       // trial initiated
-      trial_start_time = session_t;
-      send("Trial initiated... ");
+      
+      //changes from original state machine
+      // trial_start_time = session_t;
+      
+      // send("Trial initiated... ");
       // play(init_sound{1});
       trial_started = true;
       num_trials = num_trials + 1;
@@ -370,27 +368,20 @@ void stateMachine() {
       // trial_value_buffer = [tmp_value_buffer(1:end - 1, 1) - trial_start_time, tmp_value_buffer(1:end - 1, 2)];
       
       // start recording force data (%skip last entry, it will be added below after the "if trial_started" section
-      std::transform(tmp_value_buffer.begin(), tmp_value_buffer.end() - 1, std::back_inserter(trial_value_buffer), [](std::vector<double> sublist) { 
-        vector<double> sublist2;
-        sublist2.push_back(sublist[0] - trial_start_time);
-        sublist2.push_back(sublist[1]);
-        // sublist[0] -= trial_start_time; 
-        return sublist2; 
-        });
-
-      for (int i = 0; i < trial_value_buffer.size(); i++) {
-        sendSpec("trial from tmp with subtraction");
-        sendSpec(String(trial_value_buffer[i][0]));
-        sendSpec(String(trial_value_buffer[i][1]));
-      }
+      
+      //we only want the values from this point on (because the last second will be given by the temporary buffer)
+      // trial_value_buffer.clear();
+      std::transform(tmp_value_buffer.begin(), tmp_value_buffer.end() - 1, std::back_inserter(trial_value_buffer), [](const std::vector<int>& sublist) { 
+        return std::vector<int>{sublist[0] - trial_start_time, sublist[1]};
+        }
+      );
+      //putting the first value (at 0);
     
       NEXT_STATE = STATE_TRIAL_STARTED;
-      fastflash(25);
       break;
     // STATE_TRIAL_STARTED
     case STATE_TRIAL_STARTED:
       send("STATE_TRIAL_STARTED");
-      flash(7);
       // check if trial time out (give a chance to continue if force > hit_thresh)
       if (trial_time > hit_window * 1000 && moduleValue_now < hit_thresh) {
         send("trial_time > hit_window && moduleValue_now < hit_thresh");
@@ -399,7 +390,7 @@ void stateMachine() {
       // check if force decreased from peak too much
       else if (moduleValue_now <= (peak_moduleValue - failure_tolerance)) {
         send("moduleValue_now <= (peak_moduleValue - failure_tolerance)");
-        send(String(peak_moduleValue));
+        // send(String(peak_moduleValue));
         NEXT_STATE = STATE_FAILURE;
       }
       // check if hit threshold has been reached
@@ -413,7 +404,6 @@ void stateMachine() {
     // STATE_HOLD
     case STATE_HOLD:
       send("STATE_HOLD");
-      flash(9);
       //check if still in reward zone
       if (moduleValue_now < hit_thresh) {
         hold_timer = millis();
@@ -426,7 +416,6 @@ void stateMachine() {
     // STATE_SUCCESS
     case STATE_SUCCESS:
       send("STATE_SUCCESS");
-      flash(4);
       // we have a success! execute only once
       // fprintf('trial successful! :D\n');
 
@@ -475,7 +464,6 @@ void stateMachine() {
     // STATE_FAILURE
     case STATE_FAILURE:
       send("STATE_FAILURE");
-      fastflash(20);
       // trial failed. execute only once
       // fprintf('trial failed :(\n');
       //TODO
@@ -511,18 +499,15 @@ void stateMachine() {
       break;
     // STATE_POST_TRIAL
     case STATE_POST_TRIAL:
-      send("STATE_POST_TRIAL");
-      flash(5);
+      // send("STATE_POST_TRIAL");
       // wait to accumulate a bit of post_trial data
       if (trial_time - trial_end_time >= post_trial_dur) {
-
         NEXT_STATE = STATE_PARAM_UPDATE;
       }
       break;
     // STATE_PARAM_UPDATE
     case STATE_PARAM_UPDATE:
       send("STATE_PARAM_UPDATE");
-      flash(10);
       // post trial processing, execute only once.
 
       // update force plot with new trial data
@@ -532,6 +517,7 @@ void stateMachine() {
       //should include trial_value_buffer data, first and second column, and a maximum (maybe), number of trials, trial start time, initial threshold, hit threshold, trial_value_buffer,
       //hold  time, trial end time, success, peak_moduleValue
       sendTrialData2Python();
+      trial_started = false;
       // set(app.force_line, 'XData', trial_value_buffer(:, 1), ...
       //     'YData', trial_value_buffer(:, 2),'Visible','on');
       // ymax = max(app.hit_thresh.Value, peak_moduleValue) * 1.25;
@@ -543,7 +529,6 @@ void stateMachine() {
 
       // reset data buffer
       trial_value_buffer.clear();
-      tmp_value_buffer.clear();
       peak_moduleValue = 0;
       success = false;
 
@@ -552,8 +537,7 @@ void stateMachine() {
       break;
     // STATE_INTER_TRIAL
     case STATE_INTER_TRIAL:
-      send("STATE_INTER_TRIAL");
-      flash(12);
+      // send("STATE_INTER_TRIAL");
       // wait a short period of time between trials
       if (getTimerDuration(it_timer) >= inter_trial_dur) {
         it_timer = millis();
@@ -563,7 +547,6 @@ void stateMachine() {
       break;
     case STATE_SESSION_END:
       send("STATE_SESSION_END");
-      flash(5);
       //TO-DO
       // finish_up(trial_table,session_t, num_trials, num_rewards, app, crashed);
       // exit while loop
@@ -571,7 +554,6 @@ void stateMachine() {
 
     default:
       send("default");
-      fastflash(20);
       send("error in state machine!");
       //TO-DO
       // finish_up(trial_table,session_t, num_trials, num_rewards, app, crashed);
@@ -579,12 +561,16 @@ void stateMachine() {
       break;
   }
 
+  if (trial_started) {
+    recordCurrentValue();
+  }
+
   CURRENT_STATE = NEXT_STATE;
 }
 
 // void finish_up(trial_table, session_t, num_trials, num_rewards, app, crashed) {
 // //   //TO-DO
-//     send('Session Ended');
+    // send('Session Ended');
     
 //     //reset the gui buttons
 //     // reset_buttons(app);
@@ -679,8 +665,6 @@ void sendTrialData2Python() {
   SerialUSB.print(String(peak_moduleValue));
 
   SerialUSB.println("fin");
-  trial_value_buffer.clear();
-  tmp_value_buffer.clear();
   // code de fin d'envoi de données
 }
 
@@ -748,7 +732,7 @@ void fillBuffer() {
 
   // Prends en note le dernier temps enregistre dans le buffer
   LastTime = millis() - startArduinoProg;
-  delay(10);
+  delay(5);
 }
 void experimentOn() {
 
@@ -759,8 +743,7 @@ void experimentOn() {
   initTrial = serialCommand.substring(1, posIndice).toFloat();
   baselineTrial = serialCommand.substring(posIndice + 1).toFloat();
   while (serialCommand.charAt(0) == 's') {
-    fastflash(5);
-    delay(50);
+    delay(5);
     if (SerialUSB.available() > 0) {
       serialCommand = SerialUSB.readStringUntil('\r');
     }
@@ -796,6 +779,7 @@ void setup() {
   startArduinoProg = millis();  // début programme
   loop_timer = millis();
   experiment_start = millis();
+  // trial_value_buffer.resize(255, std::vector<int>(2));
 }
 
 
@@ -809,7 +793,7 @@ void loop() {
       break;
     case 'p':  // Initialisation : transmission des paramètres de la tâche à partir de Python
       {
-        send("hi");
+        // send("hi");
         // sendArduino("p" + init_thresh + ";" + init_baseline + ";" + min_duration + ";" + hit_window + ";" + hit_thresh)
       string variables;
       variables = serialCommand.substring(1).c_str();
@@ -821,7 +805,6 @@ void loop() {
       duration = stof(parts[2]);
       hit_window = stof(parts[3]);
       hit_thresh =stof(parts[4]);
-      fastflash(2);
       }
       break;
     case 's':  // Start

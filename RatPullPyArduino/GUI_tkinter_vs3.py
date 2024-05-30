@@ -69,7 +69,7 @@ hitThresh = StringVar(top)
 # variables
 
 global buffer_size
-buffer_size = 5000
+buffer_size = 500
 
 dataDeque = deque([0] * buffer_size, maxlen=buffer_size)
 timeDeque = deque([0] * buffer_size, maxlen=buffer_size) 
@@ -145,7 +145,6 @@ def readArduinoInput():
     received, dataArray, timeArray = readArduinoLine()
     if not received:
         return
-    print("data")
 
     if (len(dataArray) < buffer_size):
         dataArray = np.pad(dataArray, (0,  (buffer_size - len(dataArray))), mode="constant")
@@ -157,15 +156,8 @@ def readArduinoInput():
         
 
     # compilation des essais
-    print("sensorValueTrial len: " + str(len(sensorValueTrial)))
-    print("dataArray len: " + str(len(dataArray)))
-    print("sensorTimeStamp len: " + str(len(sensorTimeStamp)))
-    print("timeArray len: " + str(len(timeArray)))
-
-
-    
-    # sensorValueTrial = np.vstack((sensorValueTrial, dataArray))
-    # sensorTimeStamp = np.vstack((sensorTimeStamp, timeArray))  # les temps pour chacun des essais
+    sensorValueTrial = np.vstack((sensorValueTrial, dataArray))
+    sensorTimeStamp = np.vstack((sensorTimeStamp, timeArray))  # les temps pour chacun des essais
     plotData(timeArray, dataArray)
     # arduino.flushInput()  # vide le buffer en provenance de l'arduino
 
@@ -173,9 +165,8 @@ stateList = []
 
 def readArduinoLine():
     output = arduino.readline()
-    # print(output)
     output = str(output, 'utf-8')
-    
+    print(output)
     if ("data" in output and "time" in output and "fin\r\n" in output):
         output = output.strip(';fin\r\n')  # input en 'string'. Each arduino value is separated by ';'
         output = output.removeprefix('data')
@@ -199,27 +190,20 @@ def readArduinoLine():
                 time, value = pair.split('/')
                 dataDeque.extend([value])
                 timeDeque.extend([time])
-        print(output)
-        dataArray = np.array(dataDeque).astype(float)
+        dataArray = np.array(dataDeque).astype(float) 
         timeArray = np.array(timeDeque).astype(float)
-        for i in range(len(timeArray)):
-            if timeArray[i] != 0.0:
-
-                print(timeArray[i])
-                print(dataArray[i])
-        print(timeArray)
+        # print(dataArray)
         return True, dataArray, timeArray
     elif ("message" in output):
         output = output.removeprefix("message")
         output = output.removesuffix(";fin\r\n")
         stateList.append(output)
-        # print(stateList[-1])
+        # print("*\n*\n*\n*\n*")
+        print(stateList[-50:-1])
         return False, np.zeros(buffer_size), np.zeros(buffer_size)
     elif ("yumm" in output):
         output = output.removeprefix("yumm")
         output = output.removesuffix(";fin\r\n")
-        print("spec")
-        print(output)
         return False, np.zeros(buffer_size), np.zeros(buffer_size)
     else:
         print("full input not found")
@@ -238,13 +222,25 @@ def listStr2listFloat(inList):
         floatList[u] = float(val)
         u = u + 1
     floatList = np.reshape(floatList, (1, len(floatList)))
-    # print(floatList)
 
     return floatList
 
 global max_force
 max_force = 0
 def plotData(time_Array, data_Array):
+    length = 0
+    for i in range(len(time_Array)):
+        if float(time_Array[i]) != 0:
+            length = i
+            break
+    print("length")
+    print(length)
+    time_Array = time_Array[length:]
+    data_Array = data_Array[length:]
+    print(len(time_Array))
+    print(len(data_Array))
+    for i in range(len(time_Array)):
+        print(str(time_Array[i]) + " with " + str(data_Array[i]))
     # axeTempRel
     global max_force
     
@@ -252,17 +248,27 @@ def plotData(time_Array, data_Array):
     axeTempRel = (time_Array) / 1000
     min_time = axeTempRel.min()
     max_time = axeTempRel.max()
-    print(max_time)
-    print(axeTempRel)
+    if not max_time:
+        max_time = 3
 
     ax.clear()
     canvas.draw()
     canvas.flush_events()
 
     max_force = data_Array.max() if data_Array.max() >= max_force else max_force
+    if not max_force:
+        max_force = float(hitThresh.get()) + 10
     ax.plot(axeTempRel, data_Array, linewidth=0.5)
+
+    # ax.axhline(float(iniThreshold.get()), color='r', linestyle='--', label='Threshold 1', linewidth=0.5)
+    # ax.axhline(float(hitThresh.get()), color='g', linestyle='--', label='Threshold 2', linewidth=0.5)
+    ax.plot([-1, 0], [float(iniThreshold.get()), float(iniThreshold.get())], color='g', linestyle='--', linewidth=0.5)
+    ax.plot([0, float(hitWindow.get())], [float(hitThresh.get()), float(hitThresh.get())], color='r', linestyle='--', linewidth=0.5)
+    ax.axvline(x=-1, color='gray', linestyle='--', linewidth=0.5)
+    ax.axvline(x=0, color='gray', linestyle='--', linewidth=0.5)
+    ax.axvline(x=float(hitWindow.get()), color='gray', linestyle='--', linewidth=0.5)
     
-    ticks = np.arange(min_time, max_time, .5)
+    ticks = np.arange(np.floor(-1), np.ceil(max_time), .5)
     ax.set_xticks(ticks)
     ticks = np.arange(0, max_force + 100, 100)
     ax.set_yticks(ticks)
@@ -313,6 +319,7 @@ Gras = font.Font(weight="bold")  # variable qui contient l'attribut "texte en gr
 # stop l'expérience
 def stop_Button():
     sendArduino("w")
+    stateList.clear()
     onVarCheckButton.set(0)
 
 
@@ -438,10 +445,8 @@ def save_parameters():
     hit_thresh = hitThresh.get().strip()
     init_thresh = iniThreshold.get().strip()
     init_baseline = iniBaseline.get().strip()
-    print(min_duration + "s")
-    print(hit_window + "s")
-    print(hit_thresh + "s")
     sendArduino("p" + init_thresh + ";" + init_baseline + ";" + min_duration + ";" + hit_window + ";" + hit_thresh)
+    plotData(np.array(timeDeque).astype(float), np.array(dataDeque).astype(float))
     
 
 saveParametersButton = Button(Cadre5, text="Save Parameters", background='white', command=save_parameters, state="disabled")
