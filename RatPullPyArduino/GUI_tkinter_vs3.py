@@ -13,6 +13,8 @@ from tkinter.filedialog import askopenfilename
 import serial.tools.list_ports
 import sys
 from collections import deque
+from tkinter import filedialog
+import csv
 
 ports = serial.tools.list_ports.comports()
 port_found = None
@@ -438,6 +440,38 @@ HC = Entry(Cadre5, state=DISABLED).grid(row=6, column=2)
 Hold_time = Label(Cadre5, text="Hold time (s):", state=DISABLED).grid(row=7, column=1)
 HTime = Entry(Cadre5, state=DISABLED).grid(row=7, column=2)
 
+def load_parameters():
+    file_path = filedialog.askopenfilename()
+    print("Selected file:", file_path)
+
+    parameters = {}
+    with open(file_path, 'r') as csvfile:
+        reader = csv.reader(csvfile)
+        for row in reader:
+            key, value = row
+            parameters[key] = value
+    
+    return parameters
+
+def save_configuration():
+    top.withdraw()  # Hide the main window
+    parameters = {}
+    parameters['min_duration'] = minDuration.get().strip()
+    hit_window = hitWindow.get().strip()
+    hit_thresh = hitThresh.get().strip()
+    init_thresh = iniThreshold.get().strip()
+    init_baseline = iniBaseline.get().strip()
+
+    file_path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
+    if not file_path:
+        return  # User canceled the dialog
+    
+    with open(file_path, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        for key, value in parameters.items():
+            writer.writerow([key, value])
+            
+    top.deiconify()
 
 def save_parameters():
     min_duration = minDuration.get().strip()
@@ -448,6 +482,9 @@ def save_parameters():
     sendArduino("p" + init_thresh + ";" + init_baseline + ";" + min_duration + ";" + hit_window + ";" + hit_thresh)
     plotData(np.array(timeDeque).astype(float), np.array(dataDeque).astype(float))
     
+loadParametersButton = Button(Cadre5, text="Load Parameters", background='white', command=load_parameters)
+loadParametersButton.grid(row=6, column=6)
+
 
 saveParametersButton = Button(Cadre5, text="Save Parameters", background='white', command=save_parameters, state="disabled")
 saveParametersButton.grid(row=7, column=6)

@@ -55,6 +55,7 @@ auto hold_timer = millis();
 auto it_timer = millis();
 std::vector<std::vector<int>> tmp_value_buffer;    // [time value], first row is oldest data
 std::vector<std::vector<int>> trial_value_buffer;  // [time value]
+std::vector<std::vector<std::vector<int>>> trial_value_buffer2;  // [time value2]
 int duration;
 int MaxTrialNum = 100;
 int hold_time_min = 0;
@@ -297,7 +298,7 @@ void stateMachine() {
   std::vector<std::vector<int>> filtered_rows;
   std::copy_if(tmp_value_buffer.begin(), tmp_value_buffer.end(), std::back_inserter(filtered_rows), condition);
   if (filtered_rows.size() >= lenBuffer) {
-    filtered_rows.erase(trial_value_buffer.begin());
+    filtered_rows.erase(filtered_rows.begin());
   }
   filtered_rows.push_back({session_t, moduleValue_now});
   
