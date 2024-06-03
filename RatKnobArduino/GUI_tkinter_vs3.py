@@ -312,19 +312,7 @@ def plotData(time_Array, data_Array):
     max_force = data_Array.max() if data_Array.max() >= max_force else max_force
     if not max_force:
         max_force = float(hitThresh.get()) + 10
-
-    # colors_normalized = list(np.random.rand(len(data_Array)))
-    try:
-
-        colors_normalized = (data_Array - np.min(data_Array)) / (np.max(data_Array) - np.min(data_Array))
-        print(len(colors_normalized))
-        ax.scatter(axeTempRel, data_Array, c=colors_normalized, cmap='viridis', s=0.1)
-    except:
-        colors_normalized = list(np.random.rand(len(data_Array)))
-        print(len(colors_normalized))
-        ax.scatter(axeTempRel, data_Array, c=colors_normalized, cmap='viridis', s=0.1)
-    
-    
+    ax.plot(axeTempRel, data_Array, linewidth=0.5)
 
     # ax.axhline(float(iniThreshold.get()), color='r', linestyle='--', label='Threshold 1', linewidth=0.5)
     # ax.axhline(float(hitThresh.get()), color='g', linestyle='--', label='Threshold 2', linewidth=0.5)

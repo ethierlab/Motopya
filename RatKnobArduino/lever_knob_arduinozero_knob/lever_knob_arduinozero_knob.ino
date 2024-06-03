@@ -14,9 +14,21 @@
 #include <numeric>
 #include <iostream>
 #include <sstream>
+#include <cmath>
 using namespace std;
 
 // DECLARATION VARIABLES------------
+
+const int pinA = 2;  // A output
+const int pinB = 3;  // B output
+const int pinSW1 = 4; // Switch 1
+const int pinSW2 = 5; // Switch 2
+
+int initial;
+int previous;
+int sum = 0;
+int encoderPos = 0;
+
 
 // code controllers
 bool flash_enabled = false;
@@ -287,7 +299,8 @@ void stateMachine() {
 
   //% read module force
   moduleValue_before = moduleValue_now;    // store previous value
-  moduleValue_now = analogRead(AnalogIN);  // update current value
+  // moduleValue_now = analogRead(AnalogIN);  // update current value
+  moduleValue_now = getEncoderValue();  // update current value
 
   // fill force buffertrial_start_time
   // limit temp buffer size to 'buffer_dur' (last 1s of data)+
@@ -635,6 +648,7 @@ float avebuffer(int aveOnLast) {
 }
 
 void sendTrialData2Python() {
+
   send("Trial Data");
   //should include trial_value_buffer data, first and second column, and a maximum (maybe), number of trials, trial start time, initial threshold, hit threshold, trial_value_buffer,
   //hold  time, trial end time, success, peak_moduleValue
@@ -670,6 +684,26 @@ void sendTrialData2Python() {
   SerialUSB.print(String(peak_moduleValue));
   SerialUSB.println("fin");
   // code de fin d'envoi de données
+}
+
+int getEncoderValue() {
+  int encoderA = digitalRead(pinA);
+  int encoderB = digitalRead(pinB);
+  previous = sum;
+  sum = encoderA + 2 * encoderB;
+  send(String(sum));
+
+  if ((previous == 0 && sum == 1) || (previous == 1 && sum == 3) ||  (previous == 3 && sum == 2) ||  (previous == 2 && sum == 0)){
+    encoderPos ++;
+  }
+  else if ((sum == 0 && previous == 1) || (sum == 1 && previous == 3) ||  (sum == 3 && previous == 2) ||  (sum == 2 && previous == 0)){
+    encoderPos --;
+  }
+
+
+  int angle = ((encoderPos * 360 / 32)); //%360 abs
+  send(String(angle));
+  return angle;
 }
 
 void sendPartialTrialData2Python() {
@@ -817,8 +851,10 @@ std::vector<std::string> split_string(const std::string& input_string, char deli
 void setup() {
   // put your setup code here, to run once:
   pinMode(AnalogIN, INPUT);
-  pinMode(13, OUTPUT);
-  pinMode(12, OUTPUT);
+  pinMode(pinA, INPUT_PULLUP);// Internal pull-up resistor for switch A
+  pinMode(pinB, INPUT_PULLUP);// Internal pull-up resistor for switch B
+  pinMode(pinSW1, INPUT); 
+  pinMode(pinSW2, INPUT); 
   // pinMode(10, OUTPUT);
   // pinMode(9,OUTPUT);
   SerialUSB.begin(115200);      // baud rate
