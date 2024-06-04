@@ -287,6 +287,7 @@ void stateMachine() {
 
   //% read module force
   moduleValue_before = moduleValue_now;    // store previous value
+  // moduleValue_now = (app.moto.read_Pull() - app.moto.baseline) * app.lever_gain; % update current value
   moduleValue_now = analogRead(AnalogIN);  // update current value
 
   // fill force buffertrial_start_time

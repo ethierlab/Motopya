@@ -48,7 +48,6 @@ try:
     cmd = "testing" + '\r'
     arduino.write(cmd.encode())
     arduino.reset_output_buffer()
-    print("hi")
 except Exception as e:
     print("An error occurred:", e)
 
@@ -117,6 +116,8 @@ def connectArduino():
         sys.exit()
     else:
         print(f"Arduino found at port {port_found} in description {description}")
+        lamp.turn_on()
+        
 
     
     # Serial communication
@@ -358,21 +359,31 @@ def chronometer(debut):
 
 def startButton():
     # Déclenche la session comportement
+    try:
 
-    sendArduino("s" + iniThreshold.get() + "b" + iniBaseline.get()) # déclenche la boucle essai dans arduino et envoie le seuil pour déclencher l essaie
-    # t.sleep(8) # permet au buffer d'arduino de se remplir
+        sendArduino("s" + iniThreshold.get() + "b" + iniBaseline.get()) # déclenche la boucle essai dans arduino et envoie le seuil pour déclencher l essaie
+        # t.sleep(8) # permet au buffer d'arduino de se remplir
 
 
 
-    # Boucle sans fin
-    arduino.flushInput()
-    debut = t.time()
-    while onVarCheckButton.get():
-        chronometer(debut)
-        if arduino.inWaiting() > 1:
-           readArduinoInput()
-
-        top.update()
+        # Boucle sans fin
+        arduino.flushInput()
+        debut = t.time()
+        while onVarCheckButton.get():
+            chronometer(debut)
+            try:
+                if arduino.inWaiting() > 1:
+                    readArduinoInput()
+                top.update()
+            except serial.SerialException:
+                lamp.turn_off()
+                onVarCheckButton.set(0)
+                print("The device unexpectedly disconnected.")
+                break
+            
+    except serial.SerialException:
+        onVarCheckButton.set(0)
+        print("There is no device connected.")
 
 #def
 
@@ -387,6 +398,26 @@ def stop_Button():
     sendArduino("w")
     stateList.clear()
     onVarCheckButton.set(0)
+
+
+class UILamp(Canvas):
+    def __init__(self, parent, diameter=50, color="#5d615d", *args, **kwargs):
+        super().__init__(parent, width=diameter, height=diameter, *args, **kwargs)
+        self.diameter = diameter
+        self.color = color
+        self.lamp = self.create_oval(2, 2, diameter-2, diameter-2, fill=color, outline="black")
+    
+    def change_color(self, new_color):
+        self.color = new_color
+        self.itemconfig(self.lamp, fill=new_color)
+
+    def turn_on(self):
+        self.color = "#24fc03"
+        self.itemconfig(self.lamp, fill = "#24fc03")
+
+    def turn_off(self):
+        self.color = "#5d615d"
+        self.itemconfig(self.lamp, fill = "#5d615d")
 
 
 startButton_name = Checkbutton(Cadre3, text="START", background='green', variable=onVarCheckButton, command=startButton)
@@ -406,30 +437,33 @@ stopButton.grid(row=1, column=6)
 Cadre1 = Frame(top)
 Cadre1.grid(row=1, column=1)
 
+
 # Boutons de tests_______________________________________________________________
-Title = Label(Cadre1, text="Moto Track", fg='blue', justify=CENTER, font=Gras).grid(row=1, column=2)
-Connect = Button(Cadre1, text="Connect\nMoto Track", command=connectArduino).grid(row=1, column=5)
-Retract = Button(Cadre1, text="Retract\nSensor At Pos", state=DISABLED).grid(row=2, column=5)
+Title = Label(Cadre1, text="Rat Pull Task", fg='black', justify=CENTER, font= (Gras, 25, "bold"), padx=5, pady=25).grid(row=1, column=2)
+lamp = UILamp(Cadre1, diameter=32)
+lamp.grid(row=2, column=4)
+Connect = Button(Cadre1, text="Connect Device", command=connectArduino, width=13, font= ("Serif", 11, "bold")).grid(row=2, column=5)
+# Retract = Button(Cadre1, text="Retract\nSensor At Pos", state=DISABLED).grid(row=2, column=5)
 
 # infos sur le rat et la sauvegarde des données
-Rat = Label(Cadre1, text="Rat ID:").grid(row=2, column=1)
-Rat_ID = Entry(Cadre1, ).grid(row=2, column=2)
+Rat = Label(Cadre1, text="Rat ID:  ", font=("Serif", 11, "bold")).grid(row=2, column=0)
+Rat_ID = Entry(Cadre1, width=10).grid(row=2, column=1)
 
 
-def browse():
-    Save_browser = askopenfilename()
-    Save_location.delete(1, END)
-    Save_location.insert(1, Save_browser)
+# def browse():
+#     Save_browser = askopenfilename()
+#     Save_location.delete(1, END)
+#     Save_location.insert(1, Save_browser)
 
 
-Save = Label(Cadre1, text="Save location (parent folder):").grid(row=3, column=1)
-Save_location = Entry(Cadre1, textvariable=savefolder).grid(row=3, column=2)
-Browse = Button(Cadre1, text="Browse", command=browse)
-Browse.grid(row=3, column=3)
+# Save = Label(Cadre1, text="Save location (parent folder):").grid(row=3, column=1)
+# Save_location = Entry(Cadre1, textvariable=savefolder).grid(row=3, column=2)
+# Browse = Button(Cadre1, text="Browse", command=browse)
+# Browse.grid(row=3, column=3)
 
-Calibration = Label(Cadre1, text="Calibration file location:").grid(row=4, column=1)
-Calib = Entry(Cadre1, ).grid(row=4, column=2)
-Change = Button(Cadre1, text="Change").grid(row=4, column=3)
+# Calibration = Label(Cadre1, text="Calibration file location:").grid(row=4, column=1)
+# Calib = Entry(Cadre1, ).grid(row=4, column=2)
+# Change = Button(Cadre1, text="Change").grid(row=4, column=3)
 
 
 def save_session():
@@ -439,70 +473,137 @@ def save_session():
     np.savetxt(dir_target, sensorValueTrial, delimiter=",")
 
 
-Save_session = Button(Cadre1, text="Save Session", command=save_session)
-Save_session.grid(row=5, column=1)
+# Save_session = Button(Cadre1, text="Save Session", command=save_session)
+# Save_session.grid(row=5, column=1)
 # _______________________________________________________________________________
 
+def set_text_bg(frame):
+    # Get the background color of the frame
+    bg_color = frame.cget("bg")
+
+    # Configure the background color of all text widgets in the frame
+    for child in frame.winfo_children():
+        if isinstance(child, (Label, Text, Checkbutton)):
+            child.config(bg=bg_color)
+        # if isinstance(child, (Label, Text, Entry, Checkbutton)):
+            # child.config(relief="solid")
+        if isinstance(child, (Entry)):
+            child.config(width=6)
+        if isinstance(child, (Label)) and child["text"] not in ["min", "max", "adapt"]:
+            child.config(anchor="e", justify=RIGHT)
+            child.grid(sticky="e")
+        # if isinstance(child, (Button)):
+            # child.config(justify=CENTER)
+            # child.grid(sticky="w")
 
 # --------------------------------
-Cadre5 = Frame(top)
-Cadre5.grid(row=2, column=1)
-Cadre5.config(borderwidth=2, relief=RIDGE)
+Cadre7 = Frame(top)
+Cadre7.grid(row=2, column=1, padx=20, pady=20)
+# Cadre5.config(borderwidth=2, relief=RIDGE)
+Cadre7.config(relief=RIDGE)
+Cadre5 = Frame(Cadre7)
+Cadre5.grid(row=2, column=0)
+# Cadre5.config(borderwidth=2, relief=RIDGE)
+Cadre5.config(relief=RIDGE, bg="#e0e0e0")
+Cadre5.grid_rowconfigure(0, pad=10,)
+Cadre5.grid_rowconfigure(1, pad=10)
+Cadre5.grid_rowconfigure(2, pad=10)
+Cadre5.grid_rowconfigure(3, pad=10)
+Cadre5.grid_rowconfigure(4, pad=10)
+Cadre5.grid_rowconfigure(5, pad=10)
+Cadre5.grid_rowconfigure(6, pad=10)
+Cadre5.grid_columnconfigure(0, pad=10, weight=1)
+Cadre5.grid_columnconfigure(1, pad=10, weight=1)
+Cadre5.grid_columnconfigure(2, pad=10, weight=1)
+Cadre5.grid_columnconfigure(3, pad=10, weight=1)
+Cadre5.grid_columnconfigure(4, pad=10, weight=1)
+Cadre5.grid_columnconfigure(5, pad=10, weight=1, minsize=60)
+Cadre5.grid_columnconfigure(6, pad=10, weight=1)
+border = Frame(Cadre7, height=0.3, bg="black")
+border.grid(row=1, column=0, sticky="ew")
 
-Parametre = Label(Cadre5, text="Parameters", fg='blue', justify=CENTER, font=Gras).grid(row=1, column=1)
+Parametre = Label(Cadre7, text="Parameters: ", fg='black', justify=LEFT, font=Gras).grid(row=0, column=0, sticky="w")
 
-Duree = Label(Cadre5, text="Duration (min):").grid(row=2, column=1)
-min = Entry(Cadre5, textvariable=minDuration).grid(row=2, column=2)
+Init_thresh = Label(Cadre5, text="Init thresh (deg):").grid(row=0, column=0)
+IT = Entry(Cadre5, textvariable = iniThreshold).grid(row=0, column=1)
 
-Hit_window = Label(Cadre5, text="Hit window (s):").grid(row=2, column=3)
-HW = Entry(Cadre5, textvariable=hitWindow).grid(row=2, column=4)
+Hit_window = Label(Cadre5, text="Hit window (s):").grid(row=1, column=0)
+HW = Entry(Cadre5, textvariable=hitWindow).grid(row=1, column=1)
 
-Sensor_pos = Label(Cadre5, text="Sensor pos (cm):").grid(row=3, column=1)
-Sensor = Entry(Cadre5).grid(row=3, column=2)
+Duree = Label(Cadre5, text="Max Duration (min):").grid(row=2, column=0)
+min = Entry(Cadre5, textvariable=minDuration).grid(row=2, column=1)
 
-Init_thresh = Label(Cadre5, text="Init thresh (deg):").grid(row=3, column=3)
-IT = Entry(Cadre5, textvariable = iniThreshold).grid(row=3, column=4)
 
-Init_baseline = Label(Cadre5, text="Init baseline (deg):").grid(row=3, column=5)
-IB = Entry(Cadre5, textvariable = iniBaseline).grid(row=3, column=6)
+Lever_gain = Label(Cadre5, text="Lever Gain :").grid(row=0, column=4, columnspan=2)
+Gain_entry = Entry(Cadre5).grid(row=0, column=6)
 
-adaptive = Label(Cadre5, text="adaptive").grid(row=4, column=3)
+Drop_Tolerance = Label(Cadre5, text="Force Drop Tolerance (g) :").grid(row=1, column=3, columnspan=3)
+Drop_entry = Entry(Cadre5).grid(row=1, column=6)
+
+Max_Trials = Label(Cadre5, text="Max Trials (num) :").grid(row=2, column=3, columnspan=3)
+Max_entry = Entry(Cadre5).grid(row=2, column=6)
+# Sensor_pos = Label(Cadre5, text="Sensor pos (cm):").grid(row=3, column=1)
+# Sensor = Entry(Cadre5).grid(row=3, column=2)
+
+# Init_baseline = Label(Cadre5, text="Init baseline (deg):").grid(row=3, column=5)
+# IB = Entry(Cadre5, textvariable = iniBaseline).grid(row=3, column=6)
+
+adaptive = Label(Cadre5, text="adapt").grid(row=3, column=2)
 
 
 # def adapt_thres():
 
+min = Label(Cadre5, text="min").grid(row=3, column=3)
+min_thresh = Entry(Cadre5, state=DISABLED)
+min_thresh.grid(row=4, column=3)
+# min_ceiling = Entry(Cadre5, state=DISABLED).grid(row=6, column=4)
+min_time = Entry(Cadre5, state=DISABLED)
+min_time.grid(row=5, column=3)
+
+max = Label(Cadre5, text="max").grid(row=3, column=4)
+max_thresh = Entry(Cadre5, state=DISABLED)
+max_thresh.grid(row=4, column=4)
+# max_ceiling = Entry(Cadre5, state=DISABLED).grid(row=6, column=5)
+max_time = Entry(Cadre5, state=DISABLED)
+max_time.grid(row=5, column=4)
+
 def manage_threshold():
-    if min_thresh['state'] == 'disabled' and max_thresh['state'] == 'disabled':
-        min_thresh['state'] = 'normal'
-        max_thresh['state'] = 'normal'
-    elif min_thresh['state'] == 'normal' and max_thresh['state'] == 'normal':
-        min_thresh['state'] = 'disabled'
-        max_thresh['state'] = 'disabled'
+
+    print("managing")
+    if min_thresh['state'] == DISABLED and max_thresh['state'] == DISABLED:
+        min_thresh['state'] = NORMAL
+        max_thresh['state'] = NORMAL
+    elif min_thresh['state'] == NORMAL and max_thresh['state'] == NORMAL:
+        min_thresh['state'] = DISABLED
+        max_thresh['state'] = DISABLED
+
+def manage_time():
+
+    print("managing")
+    if min_time['state'] == DISABLED and max_time['state'] == DISABLED:
+        min_time['state'] = NORMAL
+        max_time['state'] = NORMAL
+    elif min_time['state'] == NORMAL and max_time['state'] == NORMAL:
+        min_time['state'] = DISABLED
+        max_time['state'] = DISABLED
 
 
 adapter_threshold = IntVar()
-adapt_thresh = Checkbutton(Cadre5).grid(row=5, column=3)  # command=manage_threshold
-adapt_ceiling = Checkbutton(Cadre5, state=DISABLED).grid(row=6, column=3)
-adapt_time = Checkbutton(Cadre5, state=DISABLED).grid(row=7, column=3)
+adapt_thresh = Checkbutton(Cadre5, command=lambda: manage_threshold()).grid(row=4, column=2)  # command=manage_threshold
+# adapt_ceiling = Checkbutton(Cadre5, state=DISABLED).grid(row=6, column=3)
+adapt_time = Checkbutton(Cadre5, command=lambda: manage_time()).grid(row=5, column=2)
 
-min = Label(Cadre5, text="min").grid(row=4, column=4)
-min_thresh = Entry(Cadre5, state=DISABLED).grid(row=5, column=4)
-min_ceiling = Entry(Cadre5, state=DISABLED).grid(row=6, column=4)
-min_time = Entry(Cadre5, state=DISABLED).grid(row=7, column=4)
 
-max = Label(Cadre5, text="max").grid(row=4, column=5)
-max_thresh = Entry(Cadre5, state=DISABLED).grid(row=5, column=5)
-max_ceiling = Entry(Cadre5, state=DISABLED).grid(row=6, column=5)
-max_time = Entry(Cadre5, state=DISABLED).grid(row=7, column=5)
 
-Hit_thresh = Label(Cadre5, text="Hit Thresh (deg):").grid(row=5, column=1)
-HThresh = Entry(Cadre5, textvariable=hitThresh).grid(row=5, column=2)
+Hit_thresh = Label(Cadre5, text="Hit Thresh (deg):").grid(row=4, column=0)
+HThresh = Entry(Cadre5, textvariable=hitThresh).grid(row=4, column=1)
 
-Hit_ceiling = Label(Cadre5, text="Hit ceiling (deg):", state=DISABLED).grid(row=6, column=1)
-HC = Entry(Cadre5, state=DISABLED).grid(row=6, column=2)
+# Hit_ceiling = Label(Cadre5, text="Hit ceiling (deg):", state=DISABLED).grid(row=6, column=1)
+# HC = Entry(Cadre5, state=DISABLED).grid(row=6, column=2)
 
-Hold_time = Label(Cadre5, text="Hold time (s):", state=DISABLED).grid(row=7, column=1)
-HTime = Entry(Cadre5, state=DISABLED).grid(row=7, column=2)
+Hold_time = Label(Cadre5, text="Hold time (s):").grid(row=5, column=0)
+HTime = Entry(Cadre5).grid(row=5, column=1)
+
 
 def load_parameters():
     global hitWindow
@@ -573,15 +674,15 @@ def save_parameters():
     sendArduino("p" + init_thresh + ";" + init_baseline + ";" + min_duration + ";" + hit_window + ";" + hit_thresh)
     plotData(np.array(timeDeque).astype(float), np.array(dataDeque).astype(float))
     
-loadParametersButton = Button(Cadre5, text="Load Parameters", background='white', command=load_parameters)
-loadParametersButton.grid(row=5, column=6)
+loadParametersButton = Button(Cadre5, text="Load", background='white', width=12, command=load_parameters)
+loadParametersButton.grid(row=6, column=3, columnspan=2)
 
-saveConfigurationButton = Button(Cadre5, text="Save Configuration", background='white', command=save_configuration)
-saveConfigurationButton.grid(row=6, column=6)
+saveConfigurationButton = Button(Cadre5, text="Save", background='white', width=10, command=save_configuration)
+saveConfigurationButton.grid(row=6, column=5, columnspan=2)
 
 
-saveParametersButton = Button(Cadre5, text="Save Parameters", background='white', command=save_parameters, state="disabled")
-saveParametersButton.grid(row=7, column=6)
+# saveParametersButton = Button(Cadre5, text="Save Parameters", background='white', command=save_parameters, state="disabled")
+# saveParametersButton.grid(row=7, column=6)
 
 def is_int(s):
     try:
@@ -592,11 +693,13 @@ def is_int(s):
 
 def entry_changed(*args):
     if ((iniThreshold.get().strip() and iniBaseline.get().strip() and minDuration.get().strip() and hitWindow.get().strip() and hitThresh.get().strip() )):
-        saveParametersButton.config(state="normal")
+        # saveParametersButton.config(state="normal")
         if not (is_int(iniThreshold.get()) and is_int(iniBaseline.get()) and is_int(minDuration.get()) and is_int(hitWindow.get()) and is_int(hitThresh.get())):
-            saveParametersButton.config(state="disabled")
+            # saveParametersButton.config(state="disabled")
+            print("hh")
     else:
-        saveParametersButton.config(state="disabled")
+        print("else")
+        # saveParametersButton.config(state="disabled")
 
 iniThreshold.trace_add("write", entry_changed)
 iniBaseline.trace_add("write", entry_changed)
@@ -614,6 +717,8 @@ Med_pick = Label(Cadre4, text="Median Peak:", font=Gras).grid(row=2, column=1)
 Pellet = Label(Cadre4, text="Pellet delivered:", font=Gras).grid(row=1, column=3)
 timer_label = Label(Cadre4, text="Time elapsed: 11:11:11", font=Gras)
 timer_label.grid(row=2, column=3)
+
+set_text_bg(Cadre5)
 
 # #_______________________________________________________________________________
 top.mainloop()
