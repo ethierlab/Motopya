@@ -1,4 +1,7 @@
 from tkinter import *
+import tkinter as tk
+from tkinter import ttk
+import customtkinter
 import tkinter.font as font
 import time as t
 from datetime import datetime
@@ -14,6 +17,7 @@ import serial.tools.list_ports
 import sys
 from collections import deque
 from tkinter import filedialog
+import time
 import csv
 
 ports = serial.tools.list_ports.comports()
@@ -54,21 +58,83 @@ except Exception as e:
 # création de l'interface avec titre et taille de la fenêtre
 top = Tk()
 top.title("Moto Knob Controller")
+
+top.resizable(False, False)
 # top.minsize(1211, 611)
 
 
-onVarCheckButton = IntVar(top)
-offVarCheckButton = IntVar(top)
-savefolder = StringVar(top)
-iniThreshold = StringVar(top)
-iniBaseline = StringVar(top)
-minDuration = StringVar(top)
-hitWindow = StringVar(top)
-hitThresh = StringVar(top)
+session_running = False
+session_paused = False
+num_pellets = 0
+num_rewards = 0
+num_trials = 0
+parameters = {}
+
+saveFolder = StringVar(top)
+parameters["iniThreshold"] = StringVar(top) #0
+parameters["iniBaseline"] = StringVar(top) #1
+parameters["minDuration"] = StringVar(top)#2
+parameters["hitWindow"] = StringVar(top)#3
+parameters["hitThresh"] = StringVar(top)#4
+parameters["hitThreshAdapt"] = BooleanVar(top)#5
+parameters["hitThreshMin"] = StringVar(top)#6
+parameters["hitThreshMax"] = StringVar(top)#7
+parameters["leverGain"] = StringVar(top)#8
+parameters["forceDrop"] = StringVar(top)#9
+parameters["maxTrials"] = StringVar(top)#10
+parameters["holdTime"] = StringVar(top)#11
+parameters["holdTimeAdapt"] = BooleanVar(top)#12
+parameters["holdTimeMin"] = StringVar(top)#13
+parameters["holdTimeMax"] = StringVar(top)#14
+
+parameters["iniBaseline"].set("1")
+
+
+
+# Create a canvas
+# canvas = tk.Canvas(width=1000, height=600)
+# canvas.grid(row=0, column=0, sticky="nsew")
+
+# def on_frame_configure(event):
+#         # Update the scroll region of the canvas to include the frame
+#         canvas.configure(scrollregion=canvas.bbox("all"))
+
+# # Add a vertical scrollbar to the canvas
+# scrollbar = ttk.Scrollbar(top, orient=VERTICAL, command=canvas.xview)
+# scrollbar.grid(row=0, column=1, sticky="ns")
+
+# # Configure the canvas to use the scrollbar
+# canvas.configure(yscrollcommand=scrollbar.set)
+
+# # Create a frame inside the canvas
+# scrollable_frame = Frame(canvas)
+
+# # Add the frame to the canvas window
+# canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+
+# # Bind the frame configuration to the canvas scroll region
+# scrollable_frame.bind("<Configure>", on_frame_configure)
 
 
 # variables
 
+# scrollbar = Scrollbar(top)
+# scrollbar.grid( row=0,column=0, sticky="ns" )
+
+# mylist = Listbox(top, yscrollcommand = scrollbar.set )
+# for line in range(100):
+#    mylist.insert(END, "This is line number " + str(line))
+   
+# mylist.grid(row=0, column=0, sticky="nswe" )
+
+
+CadreGauche = Frame(top)
+CadreGauche.grid(row=0, column=0, padx=20, pady=20)
+vertical_border = Frame(top, width=1, bg="black")
+vertical_border.grid(row=0, column=1, sticky="ns")
+CadreDroite = Frame(top)
+CadreDroite.grid(row=0, column=2, padx=20, pady=20)
+# scrollbar.config( command = CadreGauche.yview )
 global buffer_size
 buffer_size = 500
 
@@ -82,15 +148,21 @@ sensorValueTrial = np.empty((1, buffer_size),
 global sensorTimeStamp
 sensorTimeStamp = np.empty((1, buffer_size), dtype="float")  # les temps pour chacun des essais
 
-Cadre6 = Frame(top)
+Cadre6 = Frame(CadreDroite)
 Cadre6.grid(row=2, column=2)
 
 Title_array = Label(Cadre6, text="Knob Rotation Angle").grid(row=1, column=1, columnspan=2, pady=2)
 # fig = plt.Figure(figsize=(3, 2), dpi=211, layout='constrained')
-fig = plt.Figure(figsize=(3, 2), dpi=211)
+fig = plt.Figure(figsize=(3, 3), dpi=200)
 ax = fig.add_subplot(111)
+
+fig.patch.set_facecolor('#f0f0f0')
 canvas = FigureCanvasTkAgg(fig, master=Cadre6)  # tk.DrawingArea.
 canvas.get_tk_widget().grid(row=1, column=1, columnspan=2, sticky='E', pady=2)
+
+
+def testConnection():
+    sendArduino("Testing")
 
 def connectArduino():
     global arduino
@@ -135,8 +207,11 @@ def connectArduino():
 # Boutons de contrôle____________________________________________________________
 def sendArduino(text):
     cmd = text + '\r'
-    arduino.write(cmd.encode())
-    arduino.reset_output_buffer()
+    try:
+        arduino.write(cmd.encode())
+        arduino.reset_output_buffer()
+    except serial.SerialException:
+        print("Device not connected.")
 
 
 def readArduinoInput():
@@ -174,6 +249,7 @@ stateList = []
 def readArduinoLine():
     global dataDeque
     global timeDeque
+    global num_trials, num_pellets, num_rewards
     output = arduino.readline()
     output = str(output, 'utf-8')
 
@@ -219,6 +295,24 @@ def readArduinoLine():
         print("after")
         print(dataArray)
         # print(dataArray)
+
+
+        trial_numbers = data[1].split(";")
+        print("numbers")
+        for pair in trial_numbers:
+            print(pair)
+        num_trials = int(trial_numbers[0])
+        trial_start_time = int(trial_numbers[1]) 
+        init_thresh = int(trial_numbers[2])
+        hold_time = int(trial_numbers[3])
+        hit_thresh = int(trial_numbers[4])
+        trial_end_time = int(trial_numbers[5])
+        success = int(trial_numbers[6])
+        peak_moduleValue = int(trial_numbers[7])
+        num_pellets = int(trial_numbers[8])
+        num_rewards = int(trial_numbers[9])
+
+
         return True, dataArray, timeArray
     elif ("trialData" in output and "partialEnd\r\n" in output):
         print("partial")
@@ -245,6 +339,20 @@ def readArduinoLine():
         print(dataDeque)
         dataArray = np.array(dataDeque).astype(float) 
         timeArray = np.array(timeDeque).astype(float)
+        trial_numbers = data[1].split(";")
+        print("numbers")
+        for pair in trial_numbers:
+            print(pair)
+        num_trials = int(trial_numbers[0])
+        trial_start_time = int(trial_numbers[1]) 
+        init_thresh = int(trial_numbers[2])
+        hold_time = int(trial_numbers[3])
+        hit_thresh = int(trial_numbers[4])
+        trial_end_time = int(trial_numbers[5])
+        success = int(trial_numbers[6])
+        peak_moduleValue = int(trial_numbers[7])
+        num_pellets = int(trial_numbers[8])
+        num_rewards = int(trial_numbers[9])
         # print(dataArray)
         return False, dataArray, timeArray
     elif ("message" in output):
@@ -307,33 +415,38 @@ def plotData(time_Array, data_Array):
         max_time = 3
 
     ax.clear()
+    ax.set_title("Pulling Force", fontsize=7)
     canvas.draw()
     canvas.flush_events()
 
     max_force = data_Array.max() if data_Array.max() >= max_force else max_force
     if not max_force:
-        max_force = float(hitThresh.get()) + 10
+        if (parameters["hitThresh"].get() == ""):
+            max_force = 0
+        else:
+            max_force = float(parameters["hitThresh"].get()) + 10
 
     # colors_normalized = list(np.random.rand(len(data_Array)))
-    try:
+    # try:
 
-        colors_normalized = (data_Array - np.min(data_Array)) / (np.max(data_Array) - np.min(data_Array))
-        print(len(colors_normalized))
-        ax.scatter(axeTempRel, data_Array, c=colors_normalized, cmap='viridis', s=0.1)
-    except:
-        colors_normalized = list(np.random.rand(len(data_Array)))
-        print(len(colors_normalized))
-        ax.scatter(axeTempRel, data_Array, c=colors_normalized, cmap='viridis', s=0.1)
+        # colors_normalized = (data_Array - np.min(data_Array)) / (np.max(data_Array) - np.min(data_Array))
+        # print(len(colors_normalized))
+        # ax.scatter(axeTempRel, data_Array, c=colors_normalized, cmap='viridis', s=0.1)
+    # except:
+    colors_normalized = list(np.random.rand(len(data_Array)))
+    print(len(colors_normalized))
+    ax.scatter(axeTempRel, data_Array, c=colors_normalized, cmap='viridis', s=0.1)
     
     
 
     # ax.axhline(float(iniThreshold.get()), color='r', linestyle='--', label='Threshold 1', linewidth=0.5)
     # ax.axhline(float(hitThresh.get()), color='g', linestyle='--', label='Threshold 2', linewidth=0.5)
-    ax.plot([-1, 0], [float(iniThreshold.get()), float(iniThreshold.get())], color='g', linestyle='--', linewidth=0.5)
-    ax.plot([0, float(hitWindow.get())], [float(hitThresh.get()), float(hitThresh.get())], color='r', linestyle='--', linewidth=0.5)
-    ax.axvline(x=-1, color='gray', linestyle='--', linewidth=0.5)
-    ax.axvline(x=0, color='gray', linestyle='--', linewidth=0.5)
-    ax.axvline(x=float(hitWindow.get()), color='gray', linestyle='--', linewidth=0.5)
+    if entry_changed():
+        ax.plot([-1, 0], [float(parameters["iniThreshold"].get()), float(parameters["iniThreshold"].get())], color='g', linestyle='--', linewidth=0.5)
+        ax.plot([0, float(parameters["hitWindow"].get())], [float(parameters["hitThresh"].get()), float(parameters["hitThresh"].get())], color='r', linestyle='--', linewidth=0.5)
+        ax.axvline(x=-1, color='gray', linestyle='--', linewidth=0.5)
+        ax.axvline(x=0, color='gray', linestyle='--', linewidth=0.5)
+        ax.axvline(x=float(parameters["hitWindow"].get()), color='gray', linestyle='--', linewidth=0.5)
     
     ticks = np.arange(np.floor(-1), np.ceil(max_time), .5)
     ax.set_xticks(ticks)
@@ -342,62 +455,130 @@ def plotData(time_Array, data_Array):
     ax.set_ylim(-100, max_force + 100)
     ax.tick_params(axis='both', labelsize=3)
 
-    ax.set_xlabel('times (s)')
+    ax.set_xlabel('Time(s)',fontsize=6)
 
-    ax.set_ylabel('Force')
+    ax.set_ylabel('Force(g)',fontsize=6)
     ax.margins(.15)
    
     canvas.draw()
     canvas.flush_events()
 
+def updateDisplayValues():
+    Trials.config(text="Num Trials: " + str(num_trials))
+    Rewards.config(text="Num Rewards: " + str(num_rewards))
+    Pellet.config(text="Num Pellets: " + str(num_pellets))
+
 
 def chronometer(debut):
     chrono_sec = t.time() - debut
     chrono_timeLapse = timedelta(seconds=chrono_sec)
-    timer_label.config(text=str(chrono_timeLapse))
+    timer_label.config(text="Time elapsed: " + str(chrono_timeLapse))
+
+def disconnected():
+    global session_running
+    global session_paused
+    session_paused = False
+    session_running = False
+    lamp.turn_off()
+    startButton.config(state="disabled")
+    startButton.config(text="START")
+    stopButton.config(state="disabled")
+    entry_changed()
+
+def toggle_start():
+    global session_paused
+    if session_paused:
+        session_paused = not session_paused
+        pause()
+    else:
+        startButton.config(text="PAUSE")
+        session_paused = not session_paused
+        start()
+
+def resume():
+    startButton.config(text="PAUSE")
+    # start()
+        
+def pause():
+    global session_paused
+    startButton.config(text="RESUME")
 
 
-def startButton():
+
+def start():
     # Déclenche la session comportement
+    global session_running
+    session_running = True
+    startButton.config(text="PAUSE")
+    stopButton.config(state="normal")
     try:
-
-        sendArduino("s" + iniThreshold.get() + "b" + iniBaseline.get()) # déclenche la boucle essai dans arduino et envoie le seuil pour déclencher l essaie
+        send_parameters()
+        print("s" + parameters["iniThreshold"].get() + "b" + parameters["iniBaseline"].get())
+        sendArduino("s" + parameters["iniThreshold"].get() + "b" + parameters["iniBaseline"].get()) # déclenche la boucle essai dans arduino et envoie le seuil pour déclencher l essaie
         # t.sleep(8) # permet au buffer d'arduino de se remplir
 
 
 
         # Boucle sans fin
-        arduino.flushInput()
+        # arduino.flushInput()ùù
         debut = t.time()
-        while onVarCheckButton.get():
+        while session_running:
             chronometer(debut)
+            updateDisplayValues()
             try:
                 if arduino.inWaiting() > 1:
+                    print("receiving")
                     readArduinoInput()
                 top.update()
             except serial.SerialException:
-                lamp.turn_off()
-                onVarCheckButton.set(0)
+                disconnected()
                 print("The device unexpectedly disconnected.")
                 break
+        
             
     except serial.SerialException:
-        onVarCheckButton.set(0)
+        print("did not work")
+        stop_Button()
+        disconnected()
+        
         print("There is no device connected.")
 
 #def
 
-Cadre3 = Frame(top)
-Cadre3.grid(row=3, column=1)
+Cadre3 = Frame(CadreGauche)
+Cadre3.grid(row=3, column=1, sticky="n", pady=(20,20))
+Cadre3.grid_rowconfigure(0, pad=10,)
+Cadre3.grid_columnconfigure(0, pad=10, weight=1)
+Cadre3.grid_columnconfigure(1, pad=10, weight=1)
+Cadre3.grid_columnconfigure(2, pad=10, weight=1)
+Cadre3.grid_columnconfigure(3, pad=10, weight=1)
 timer_running = False
 Gras = font.Font(weight="bold")  # variable qui contient l'attribut "texte en gras"
 
-
+def feed():
+    sendArduino("f")
 # stop l'expérience
 def stop_Button():
-    sendArduino("w")
-    stateList.clear()
-    onVarCheckButton.set(0)
+    global session_running
+    global session_paused
+    session_paused = False
+    startButton.config(state="normal")
+    startButton.config(text="START")
+    stopButton.config(state="disabled")
+    try:
+        sendArduino("w")
+        stateList.clear()
+    except serial.SerialException:
+        disconnected()
+        print("There is no device connected.")
+    session_running = False
+
+
+def set_button_size(frame, width, height, font):
+
+    for child in frame.winfo_children():
+        if isinstance(child, (Button)):
+            child.config(width=width, height=height, font=font)
 
 
 class UILamp(Canvas):
@@ -420,21 +601,27 @@ class UILamp(Canvas):
         self.itemconfig(self.lamp, fill = "#5d615d")
 
 
-startButton_name = Checkbutton(Cadre3, text="START", background='green', variable=onVarCheckButton, command=startButton)
-startButton_name.grid(row=1, column=1)
+startButton = Button(Cadre3, text="START", background='#64D413', state=DISABLED, command=toggle_start)
+startButton.grid(row=0, column=0)
 
-feedButton = Button(Cadre3, text="FEED", background='blue', state=DISABLED)
-feedButton.grid(row=1, column=2)
+stopButton = Button(Cadre3, text="STOP", background='red', state=DISABLED, command=stop_Button)
+stopButton.grid(row=0, column=1)
 
-pauseButton = Checkbutton(Cadre3, text='PAUSE', state=DISABLED)
-pauseButton.grid(row=1, column=4)
+feedButton = Button(Cadre3, text="FEED", background='#798FD4', state=NORMAL, command=feed)
+feedButton.grid(row=0, column=2)
 
-stopButton = Checkbutton(Cadre3, text="STOP", background='red', variable=onVarCheckButton, command=stop_Button)
-stopButton.grid(row=1, column=6)
+removeOffsetButton = Button(Cadre3, text='Remove\nOffset', state=DISABLED)
+removeOffsetButton.grid(row=0, column=3)
+
+set_button_size(Cadre3, 10, 2, ('Serif', 10, "bold"))
+
+
 # _______________________________________________________________________________
 
 # définition du premier cadre
-Cadre1 = Frame(top)
+
+
+Cadre1 = Frame(CadreGauche)
 Cadre1.grid(row=1, column=1)
 
 
@@ -496,9 +683,10 @@ def set_text_bg(frame):
             # child.config(justify=CENTER)
             # child.grid(sticky="w")
 
+
 # --------------------------------
-Cadre7 = Frame(top)
-Cadre7.grid(row=2, column=1, padx=20, pady=20)
+Cadre7 = Frame(CadreGauche)
+Cadre7.grid(row=2, column=1, padx=20, pady=(0, 20))
 # Cadre5.config(borderwidth=2, relief=RIDGE)
 Cadre7.config(relief=RIDGE)
 Cadre5 = Frame(Cadre7)
@@ -524,28 +712,28 @@ border.grid(row=1, column=0, sticky="ew")
 
 Parametre = Label(Cadre7, text="Parameters: ", fg='black', justify=LEFT, font=Gras).grid(row=0, column=0, sticky="w")
 
-Init_thresh = Label(Cadre5, text="Init thresh (deg):").grid(row=0, column=0)
-IT = Entry(Cadre5, textvariable = iniThreshold).grid(row=0, column=1)
+Init_thresh = Label(Cadre5, text="Init thresh (g):").grid(row=0, column=0)
+IT = Entry(Cadre5, textvariable = parameters["iniThreshold"]).grid(row=0, column=1)
 
 Hit_window = Label(Cadre5, text="Hit window (s):").grid(row=1, column=0)
-HW = Entry(Cadre5, textvariable=hitWindow).grid(row=1, column=1)
+HW = Entry(Cadre5, textvariable=parameters["hitWindow"]).grid(row=1, column=1)
 
 Duree = Label(Cadre5, text="Max Duration (min):").grid(row=2, column=0)
-min = Entry(Cadre5, textvariable=minDuration).grid(row=2, column=1)
+min = Entry(Cadre5, textvariable=parameters["minDuration"]).grid(row=2, column=1)
 
 
 Lever_gain = Label(Cadre5, text="Lever Gain :").grid(row=0, column=4, columnspan=2)
-Gain_entry = Entry(Cadre5).grid(row=0, column=6)
+Gain_entry = Entry(Cadre5, textvariable=parameters["leverGain"]).grid(row=0, column=6)
 
 Drop_Tolerance = Label(Cadre5, text="Force Drop Tolerance (g) :").grid(row=1, column=3, columnspan=3)
-Drop_entry = Entry(Cadre5).grid(row=1, column=6)
+Drop_entry = Entry(Cadre5, textvariable=parameters["forceDrop"]).grid(row=1, column=6)
 
 Max_Trials = Label(Cadre5, text="Max Trials (num) :").grid(row=2, column=3, columnspan=3)
-Max_entry = Entry(Cadre5).grid(row=2, column=6)
+Max_entry = Entry(Cadre5, textvariable=parameters["maxTrials"]).grid(row=2, column=6)
 # Sensor_pos = Label(Cadre5, text="Sensor pos (cm):").grid(row=3, column=1)
 # Sensor = Entry(Cadre5).grid(row=3, column=2)
 
-# Init_baseline = Label(Cadre5, text="Init baseline (deg):").grid(row=3, column=5)
+# Init_baseline = Label(Cadre5, text="Init baseline (g):").grid(row=3, column=5)
 # IB = Entry(Cadre5, textvariable = iniBaseline).grid(row=3, column=6)
 
 adaptive = Label(Cadre5, text="adapt").grid(row=3, column=2)
@@ -554,17 +742,17 @@ adaptive = Label(Cadre5, text="adapt").grid(row=3, column=2)
 # def adapt_thres():
 
 min = Label(Cadre5, text="min").grid(row=3, column=3)
-min_thresh = Entry(Cadre5, state=DISABLED)
+min_thresh = Entry(Cadre5, state=DISABLED, textvariable=parameters["hitThreshMin"])
 min_thresh.grid(row=4, column=3)
 # min_ceiling = Entry(Cadre5, state=DISABLED).grid(row=6, column=4)
-min_time = Entry(Cadre5, state=DISABLED)
+min_time = Entry(Cadre5, state=DISABLED, textvariable=parameters["holdTimeMin"])
 min_time.grid(row=5, column=3)
 
 max = Label(Cadre5, text="max").grid(row=3, column=4)
-max_thresh = Entry(Cadre5, state=DISABLED)
+max_thresh = Entry(Cadre5, state=DISABLED, textvariable=parameters["hitThreshMax"])
 max_thresh.grid(row=4, column=4)
 # max_ceiling = Entry(Cadre5, state=DISABLED).grid(row=6, column=5)
-max_time = Entry(Cadre5, state=DISABLED)
+max_time = Entry(Cadre5, state=DISABLED, textvariable=parameters["holdTimeMax"])
 max_time.grid(row=5, column=4)
 
 def manage_threshold():
@@ -589,89 +777,71 @@ def manage_time():
 
 
 adapter_threshold = IntVar()
-adapt_thresh = Checkbutton(Cadre5, command=lambda: manage_threshold()).grid(row=4, column=2)  # command=manage_threshold
+adapt_thresh = Checkbutton(Cadre5, variable=parameters["hitThreshAdapt"], command=lambda: manage_threshold()).grid(row=4, column=2)  # command=manage_threshold
 # adapt_ceiling = Checkbutton(Cadre5, state=DISABLED).grid(row=6, column=3)
-adapt_time = Checkbutton(Cadre5, command=lambda: manage_time()).grid(row=5, column=2)
+adapt_time = Checkbutton(Cadre5, variable=parameters["holdTimeAdapt"], command=lambda: manage_time()).grid(row=5, column=2)
 
 
 
-Hit_thresh = Label(Cadre5, text="Hit Thresh (deg):").grid(row=4, column=0)
-HThresh = Entry(Cadre5, textvariable=hitThresh).grid(row=4, column=1)
+Hit_thresh = Label(Cadre5, text="Hit Thresh (g):").grid(row=4, column=0)
+HThresh = Entry(Cadre5, textvariable=parameters["hitThresh"]).grid(row=4, column=1)
 
 # Hit_ceiling = Label(Cadre5, text="Hit ceiling (deg):", state=DISABLED).grid(row=6, column=1)
 # HC = Entry(Cadre5, state=DISABLED).grid(row=6, column=2)
 
 Hold_time = Label(Cadre5, text="Hold time (s):").grid(row=5, column=0)
-HTime = Entry(Cadre5).grid(row=5, column=1)
+HTime = Entry(Cadre5, textvariable=parameters["holdTime"]).grid(row=5, column=1)
 
 
 def load_parameters():
-    global hitWindow
-    global hitThresh
-    global iniThreshold
-    global iniBaseline
-
+    global parameters
     file_path = filedialog.askopenfilename()
     print("Selected file:", file_path)
-
-    parameters = {}
     try:
         with open(file_path, 'r') as csvfile:
             reader = csv.reader(csvfile)
             for row in reader:
                 key, value = row
-                if key not in ["hit_window", "hit_thresh", "init_thresh", "init_baseline", "duration"]:
-                    print("That is not a configuration file.")
+                if key not in parameters.keys():
+                    print("That is not a configuration file." + str(key))
                     return
-                parameters[key] = value
+                parameters[key].set(value)
     except: 
         print("Error reading file.")
         return
-    
-    hitWindow.set(parameters["hit_window"])
-    hitThresh.set(parameters["hit_thresh"])
-    iniThreshold.set(parameters["init_thresh"])
-    iniBaseline.set(parameters["init_baseline"])
-    minDuration.set(parameters["duration"])
     print("Parameters loaded")
     return parameters
 
 def save_configuration():
+    global parameters
     top.withdraw()  # Hide the main window
-    parameters = {}
-    parameters['min_duration'] = minDuration.get().strip()
-    hit_window = hitWindow.get().strip()
-    hit_thresh = hitThresh.get().strip()
-    init_thresh = iniThreshold.get().strip()
-    init_baseline = iniBaseline.get().strip()
-    duration = minDuration.get().strip()
+    saved_parameters = {}
+    for key, value in parameters.items():
+        saved_parameters[key] = value.get()
+
+
 
     file_path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
     if not file_path:
         return  # User canceled the dialog
     
-    parameters = {}
-    parameters["hit_window"] = hit_window
-    parameters["hit_thresh"] = hit_thresh
-    parameters["init_thresh"] = init_thresh
-    parameters["init_baseline"] = init_baseline
-    parameters["duration"] = duration
-    
     
     with open(file_path, 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
-        for key, value in parameters.items():
+        for key, value in saved_parameters.items():
             writer.writerow([key, value])
     print("Configuration saved")
     top.deiconify()
 
-def save_parameters():
-    min_duration = minDuration.get().strip()
-    hit_window = hitWindow.get().strip()
-    hit_thresh = hitThresh.get().strip()
-    init_thresh = iniThreshold.get().strip()
-    init_baseline = iniBaseline.get().strip()
-    sendArduino("p" + init_thresh + ";" + init_baseline + ";" + min_duration + ";" + hit_window + ";" + hit_thresh)
+def send_parameters():
+    global parameters
+    parameters["iniBaseline"].set("1")
+    message = "p"
+    for value in parameters.values():
+        message += str(value.get()) + ";"
+    print(message)
+    sendArduino(message)
+    # sendArduino("p" + init_thresh + ";" + init_baseline + ";" + min_duration + ";" + hit_window + ";" + hit_thresh)
     plotData(np.array(timeDeque).astype(float), np.array(dataDeque).astype(float))
     
 loadParametersButton = Button(Cadre5, text="Load", background='white', width=12, command=load_parameters)
@@ -690,35 +860,76 @@ def is_int(s):
         return True
     except ValueError:
         return False
+    
+def is_float(s):
+    try:
+        float(s)
+        return True
+    except ValueError:
+        return False
+    
+def is_boolean(value):
+    return isinstance(value, bool)
 
 def entry_changed(*args):
-    if ((iniThreshold.get().strip() and iniBaseline.get().strip() and minDuration.get().strip() and hitWindow.get().strip() and hitThresh.get().strip() )):
-        # saveParametersButton.config(state="normal")
-        if not (is_int(iniThreshold.get()) and is_int(iniBaseline.get()) and is_int(minDuration.get()) and is_int(hitWindow.get()) and is_int(hitThresh.get())):
-            # saveParametersButton.config(state="disabled")
-            print("hh")
-    else:
-        print("else")
+    parameters["iniBaseline"].set("1")
+    startButton.config(state="disabled")
+    for key, value in parameters.items():
+        if not value.get():
+            print("Not enough values" + str(key))
+            return False
+    startButton.config(state="normal")
+    for key, value in parameters.items():
+        if key in ["leverGain", "holdTime", "holdTimeMin", "holdTimeMax"] :
+            if not is_float(value.get()):
+                print("Values are not correct types" + str(key))
+                return False
+        elif key in ["leverGain", "holdTimeAdapt", "hitThreshAdapt"]:
+            if not is_boolean(value.get()):
+                print("Values are not correct types" + str(key))
+                return False
+        else:
+            if not is_int(value.get()):
+                print("Values are not correct types" + str(key))
+                return False
+            
+    startButton.config(state="normal")
+    return True
+    # if ((iniThreshold.get() and minDuration.get() and hitWindow.get() and hitThresh.get()
+    #       and leverGain.get() and forceDrop.get() and maxTrials.get())): # and iniBaseline.get()
+    #     # saveParametersButton.config(state="normal")
+    #     startButton.config(state="normal")
+    #     if not (is_int(iniThreshold.get()) and is_int(iniBaseline.get()) and is_int(minDuration.get()) and is_int(hitWindow.get()) and is_int(hitThresh.get())
+    #              and is_float(leverGain.get()) and is_int(forceDrop.get()) and is_int(maxTrials.get())):
+    #         startButton.config(state="disabled")
+    #         print("not enough values")
+    #         print("hh")
+    #         return False
+    #     else:
+    #         return True
+    # else:
+    #     print("else")
+    #     return False
         # saveParametersButton.config(state="disabled")
 
-iniThreshold.trace_add("write", entry_changed)
-iniBaseline.trace_add("write", entry_changed)
-minDuration.trace_add("write", entry_changed)
-hitWindow.trace_add("write", entry_changed)
-hitThresh.trace_add("write", entry_changed)
+for value in parameters.values():
+    value.trace_add("write", entry_changed)
 
 # #infos sur les trials, rewards et temps passé
-Cadre4 = Frame(top)
+Cadre4 = Frame(CadreDroite)
 Cadre4.grid(row=1, column=2)
 
-Trials = Label(Cadre4, text="Num Trials:", font=Gras).grid(row=1, column=1)
-Rewards = Label(Cadre4, text="Num Rewards:", font=Gras).grid(row=1, column=1)
-Med_pick = Label(Cadre4, text="Median Peak:", font=Gras).grid(row=2, column=1)
-Pellet = Label(Cadre4, text="Pellet delivered:", font=Gras).grid(row=1, column=3)
-timer_label = Label(Cadre4, text="Time elapsed: 11:11:11", font=Gras)
-timer_label.grid(row=2, column=3)
+Trials = Label(Cadre4, text="Num Trials:", font=Gras)
+Trials.grid(row=1, column=0)
+Rewards = Label(Cadre4, text="Num Rewards:", font=Gras)
+Rewards.grid(row=2, column=0)
+# Med_pick = Label(Cadre4, text="Median Peak:", font=Gras).grid(row=2, column=1)
+Pellet = Label(Cadre4, text="Pellet delivered:", font=Gras)
+Pellet.grid(row=1, column=1)
+timer_label = Label(Cadre4, text="Time elapsed: 0:00:00:000000", font=Gras)
+timer_label.grid(row=2, column=1)
 
 set_text_bg(Cadre5)
-
+plotData(np.array(timeDeque).astype(float), np.array(dataDeque).astype(float))
 # #_______________________________________________________________________________
 top.mainloop()

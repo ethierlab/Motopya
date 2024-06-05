@@ -85,6 +85,7 @@ bool stop_session;
 bool pause_session;
 int hit_thresh;
 int hit_window;
+float lever_gain = 1;
 int failure_tolerance = 100;
 int hold_time = 50;
 int hit_thresh_max;
@@ -278,18 +279,15 @@ void stateMachine() {
     // send("--- WARNING --- \nlong delay in while loop"); // tmp_value_buffer
   }
   loop_timer = millis();
-
   // experiment time
   session_t_before = session_t;
   session_t = millis() - experiment_start - pause_time;
   // app.TimeelapsedCounterLabel.Text = datestr((session_t) / 86400, 'HH:MM:SS');
   // drawnow limitrate;  // process callbacks, update figures at 20Hz max
-
   //% read module force
   moduleValue_before = moduleValue_now;    // store previous value
   // moduleValue_now = (app.moto.read_Pull() - app.moto.baseline) * app.lever_gain; % update current value
-  moduleValue_now = analogRead(AnalogIN);  // update current value
-
+  moduleValue_now = analogRead(AnalogIN) * lever_gain;  // update current value
   // fill force buffertrial_start_time
   // limit temp buffer size to 'buffer_dur' (last 1s of data)+
   // tmp_value_buffer = [tmp_value_buffer(session_t - tmp_value_buffer(:, 1) <= app.buffer_dur, :); session_t moduleValue_now];
@@ -297,17 +295,14 @@ void stateMachine() {
   auto condition = [&](const std::vector<int>& row) {
     return session_t - row[0] <= buffer_dur;
   };
-
   std::vector<std::vector<int>> filtered_rows;
   std::copy_if(tmp_value_buffer.begin(), tmp_value_buffer.end(), std::back_inserter(filtered_rows), condition);
   if (filtered_rows.size() >= lenBuffer) {
     filtered_rows.erase(filtered_rows.begin());
   }
   filtered_rows.push_back({session_t, moduleValue_now});
-  
   tmp_value_buffer = filtered_rows;
 
-  
   // STATE MACHINE
   switch (CURRENT_STATE) {
     // STATE_IDLE
@@ -327,19 +322,16 @@ void stateMachine() {
         // send("Manual Stop");
         NEXT_STATE = STATE_SESSION_END;
       }
-
-      else {
-        // check for trial initiation
-        if (moduleValue_now >= init_thresh && moduleValue_before < init_thresh) {
-          // checking value before < init_thresh ensures force is increasing i.e. not already high from previous trial
-          NEXT_STATE = STATE_TRIAL_INIT;
+      
+      else if (moduleValue_now >= init_thresh && moduleValue_before < init_thresh) {
+        // checking value before < init_thresh ensures force is increasing i.e. not already high from previous trial
+        NEXT_STATE = STATE_TRIAL_INIT;
 
 
-          //changes from original state machine
-          trial_start_time = session_t;
+        //changes from original state machine
+        trial_start_time = session_t;
 
-          trial_started = true;
-        }
+        trial_started = true;
       }
       break;
     //STATE_TRIAL_INIT
@@ -653,22 +645,28 @@ void sendTrialData2Python() {
     SerialUSB.print(trial_value_buffer[i][1]);
     SerialUSB.print(';');
   }
+
   SerialUSB.print("nt");
   SerialUSB.print(String(num_trials));
-  SerialUSB.print("ts");
+  SerialUSB.print(";");
   SerialUSB.print(String(trial_start_time));
-  SerialUSB.print("it");
+  SerialUSB.print(";");
   SerialUSB.print(String(init_thresh));
-  SerialUSB.print("hth");
-  SerialUSB.print(String(num_trials));
-  SerialUSB.print("ht");
+  SerialUSB.print(";");
+  SerialUSB.print(String(hold_time));
+  SerialUSB.print(";");
   SerialUSB.print(String(hit_thresh));
-  SerialUSB.print("te");
+  SerialUSB.print(";");
   SerialUSB.print(String(trial_end_time));
-  SerialUSB.print("s");
+  SerialUSB.print(";");
   SerialUSB.print(String(success));
-  SerialUSB.print("pk");
+  SerialUSB.print(";");
   SerialUSB.print(String(peak_moduleValue));
+  SerialUSB.print(";");
+  SerialUSB.print(String(num_pellets));
+  SerialUSB.print(";");
+  SerialUSB.print(String(num_rewards));
+
   SerialUSB.println("fin");
   // code de fin d'envoi de données
 }
@@ -695,20 +693,24 @@ void sendPartialTrialData2Python() {
 
   SerialUSB.print("nt");
   SerialUSB.print(String(num_trials));
-  SerialUSB.print("ts");
+  SerialUSB.print(";");
   SerialUSB.print(String(trial_start_time));
-  SerialUSB.print("it");
+  SerialUSB.print(";");
   SerialUSB.print(String(init_thresh));
-  SerialUSB.print("hth");
-  SerialUSB.print(String(num_trials));
-  SerialUSB.print("ht");
+  SerialUSB.print(";");
+  SerialUSB.print(String(hold_time));
+  SerialUSB.print(";");
   SerialUSB.print(String(hit_thresh));
-  SerialUSB.print("te");
+  SerialUSB.print(";");
   SerialUSB.print(String(trial_end_time));
-  SerialUSB.print("s");
+  SerialUSB.print(";");
   SerialUSB.print(String(success));
-  SerialUSB.print("pk");
+  SerialUSB.print(";");
   SerialUSB.print(String(peak_moduleValue));
+  SerialUSB.print(";");
+  SerialUSB.print(String(num_pellets));
+  SerialUSB.print(";");
+  SerialUSB.print(String(num_rewards));
 
   SerialUSB.println("partialEnd");
   int end = millis();
@@ -768,6 +770,10 @@ void sendSpec(String error) {
   // code de fin d'envoi de données
 }
 
+void feed() {
+  num_pellets ++;
+}
+
 void fillBuffer() {
   // Rempli la pile temps et data et retourne la moyenne des n dernières valeurs data
 
@@ -789,7 +795,11 @@ void experimentOn() {
   posIndice = serialCommand.indexOf('b');
   initTrial = serialCommand.substring(1, posIndice).toFloat();
   baselineTrial = serialCommand.substring(posIndice + 1).toFloat();
-  while (serialCommand.charAt(0) == 's') {
+  while (serialCommand.charAt(0) != 'w') {
+    if (serialCommand.charAt(0) == 'f') {
+      feed();
+      serialCommand = "s";
+    }
     delay(5);
     if (SerialUSB.available() > 0) {
       serialCommand = SerialUSB.readStringUntil('\r');
@@ -814,6 +824,22 @@ std::vector<std::string> split_string(const std::string& input_string, char deli
     }
     return result;
 }
+bool stringToBool(const std::string& str) {
+    std::string s = str;
+    // Convert the string to lowercase for case-insensitive comparison
+    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c){ return std::tolower(c); });
+    
+    if (s == "true" || s == "1") {
+        return true;
+    } else if (s == "false" || s == "0") {
+        return false;
+    } 
+    // else {
+    //     throw std::invalid_argument("Invalid string for conversion to bool");
+    // }
+}
+
+
 // INITIALISATION-------------------------------
 void setup() {
   // put your setup code here, to run once:
@@ -837,9 +863,11 @@ void loop() {
 
   switch (serialCommand.charAt(0)) {  // Première lettre de la commande
     case 'w':  // boucle defaut standby
+      send("received stop");
       break;
     case 'p':  // Initialisation : transmission des paramètres de la tâche à partir de Python
       {
+      send("received parameters");
         // sendArduino("p" + init_thresh + ";" + init_baseline + ";" + min_duration + ";" + hit_window + ";" + hit_thresh)
       string variables;
       variables = serialCommand.substring(1).c_str();
@@ -851,9 +879,21 @@ void loop() {
       duration = stof(parts[2]);
       hit_window = stof(parts[3]);
       hit_thresh =stof(parts[4]);
+      adapt_hit_thresh = stringToBool(parts[5]);
+      hit_thresh_min = stof(parts[6]);
+      hit_thresh_min = stof(parts[7]);
+      lever_gain =stof(parts[8]);
+      failure_tolerance =stof(parts[9]);
+      MaxTrialNum =stof(parts[10]);
+      hold_time =stof(parts[11]) * 1000;
+      adapt_hold_time= stringToBool(parts[12]);
+      hold_time_min = stof(parts[13]);
+      hold_time_max = stof(parts[14]);
+
       }
       break;
     case 's':  // Start
+      send("received start");
       experimentOn();
       break;
   }
