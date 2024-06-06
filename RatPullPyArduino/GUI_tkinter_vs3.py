@@ -35,6 +35,7 @@ num_pellets = 0
 num_rewards = 0
 num_trials = 0
 parameters = {}
+trial_table = {}
 
 parameters["iniThreshold"] = StringVar(top) #0
 parameters["iniBaseline"] = StringVar(top) #1
@@ -55,6 +56,16 @@ parameters["saveFolder"]  = StringVar(top)
 parameters["ratID"] = StringVar(top)
 
 parameters["iniBaseline"].set("1")
+
+trial_table = []
+# trial_table["start_time"] = []
+# trial_table["init_thresh"] = []
+# trial_table["hit_thresh"] = []
+# trial_table["Force"] = []
+# trial_table["hold_time"] = []
+# trial_table["duration"] = []
+# trial_table["success"] = []
+# trial_table["peak"] = []
 
 
 CadreGauche = Frame(top)
@@ -96,7 +107,16 @@ def testConnection():
 def connectArduino():
     global arduino
     if arduino:
+        print("resetting")
+        arduino.setDTR(False)
+        arduino.setRTS(False)
+        time.sleep(0.1)
+        arduino.setDTR(True)
+        arduino.setRTS(True)
+        arduino.dtr = True
         arduino.close()
+    else:
+        print("not resetting")
     ports = serial.tools.list_ports.comports()
     port_found = None
     for port in ports:
@@ -180,21 +200,16 @@ def readArduinoLine():
     output = arduino.readline()
     output = str(output, 'utf-8')
 
-    if ("data" in output and "time" in output and "fin\r\n" in output):
-        "other data"
-        output = output.strip(';fin\r\n')  # input en 'string'. Each arduino value is separated by ';'
-        output = output.removeprefix('data')
-        
-        data = output.split(";t", 1)
-        # dataDeque.extend(data[0].split(';'))
-        # timeDeque.extend(data[1].split(';'))
-        dataArray = np.array(dataDeque).astype(float)
-        timeArray = np.array(timeDeque).astype(float)
-        return True, dataArray, timeArray
-    elif ("trialData" in output and "fin\r\n" in output):
+    if ("trialData" in output and "fin\r\n" in output):
+        partial = False
         output = output.strip(';fin\r\n')  # input en 'string'. Each arduino value is separated by ';'
         output = output.removeprefix('trialData')
-        
+
+        if ("partialEnd" in output):
+            print(output)
+            partial = True
+            output = output.removesuffix('partialEnd')  # input en 'string'. Each arduino value is separated by ';'
+            print(output)
         data = output.split(";nt", 1)
         trial_data = data[0].split(";")
         # dataDeque = deque([0] * buffer_size, maxlen=buffer_size)
@@ -207,10 +222,17 @@ def readArduinoLine():
 
         dataArray = np.array(dataDeque).astype(float) 
         timeArray = np.array(timeDeque).astype(float)
+
+        if partial:
+            print("PARTIAL SPLIT")
+            return False, np.zeros(buffer_size), np.zeros(buffer_size)
+        
         dataDeque = deque([0] * buffer_size, maxlen=buffer_size)
         timeDeque = deque([0] * buffer_size, maxlen=buffer_size) 
 
-
+    
+    
+    
         trial_numbers = data[1].split(";")
         num_trials = int(trial_numbers[0])
         trial_start_time = int(trial_numbers[1])
@@ -218,63 +240,50 @@ def readArduinoLine():
         init_thresh = int(trial_numbers[2])
         hold_time = int(trial_numbers[3])
         parameters["holdTime"].set(str(float(trial_numbers[3]) / 1000))
-        print(trial_numbers[3])
+
         hit_thresh = int(trial_numbers[4])
         parameters["hitThresh"].set(str(int(trial_numbers[4])))
-        print(trial_numbers[4])
         trial_end_time = int(trial_numbers[5])
         success = int(trial_numbers[6])
+        if success:
+            display("Success")
+        else:
+            display("Failed")
         peak_moduleValue = int(trial_numbers[7])
         num_pellets = int(trial_numbers[8])
         num_rewards = int(trial_numbers[9])
+        trial_hold_time = int(trial_numbers[10])
+        trial_hit_thresh = int(trial_numbers[11])
+
+        trial = {}
+        trial["start_time"] = trial_start_time / 1000
+        trial["init_thresh"] = init_thresh
+        trial["hit_thresh"] = trial_hit_thresh
+        trial["Force"] = list(zip(list(timeArray), list(dataArray)))
+        trial["hold_time"] = trial_hold_time
+        trial["duration"] = trial_end_time / 1000
+        trial["success"] = success
+        trial["peak"] = peak_moduleValue
+
+        trial_table.append(trial)
 
 
         return True, dataArray, timeArray
-    elif ("trialData" in output and "partialEnd\r\n" in output):
-        output = output.removesuffix('partialEnd\r\n')  # input en 'string'. Each arduino value is separated by ';'
-        output = output.removeprefix('trialData')
         
-        data = output.split(";nt", 1)
-        trial_data = data[0].split(";")
-
-        for pair in trial_data:
-            if pair:  # Ignore empty strings
-                time, value = pair.split('/')
-                dataDeque.extend([value])
-                timeDeque.extend([time])
-
-        dataArray = np.array(dataDeque).astype(float) 
-        timeArray = np.array(timeDeque).astype(float)
-        trial_numbers = data[1].split(";")
-        num_trials = int(trial_numbers[0])
-        trial_start_time = int(trial_numbers[1]) 
-        init_thresh = int(trial_numbers[2])
-        hold_time = int(trial_numbers[3])
-        parameters["holdTime"].set(str(float(trial_numbers[3]) / 1000))
-        print(trial_numbers[3])
-        hit_thresh = int(trial_numbers[4])
-        parameters["hitThresh"].set(str(int(trial_numbers[4])))
-        print(trial_numbers[4])
-        hit_thresh = int(trial_numbers[4])
-        trial_end_time = int(trial_numbers[5])
-        success = int(trial_numbers[6])
-        peak_moduleValue = int(trial_numbers[7])
-        num_pellets = int(trial_numbers[8])
-        num_rewards = int(trial_numbers[9])
-        return False, dataArray, timeArray
     elif ("message" in output):
+        
         output = output.removeprefix("message")
         output = output.removesuffix(";fin\r\n")
         stateList.append(output)
         print("*\n*\n*")
         print(stateList)
-        return False, np.zeros(buffer_size), np.zeros(buffer_size)
-    elif ("yumm" in output):
-        output = output.removeprefix("yumm")
-        output = output.removesuffix(";fin\r\n")
+        if ("done" in output):
+            stop_Button()
         return False, np.zeros(buffer_size), np.zeros(buffer_size)
     else:
+        print(output)
         print("full input not found")
+
         return False, np.zeros(buffer_size), np.zeros(buffer_size)
     
 
@@ -412,6 +421,7 @@ def start():
     startButton.config(text="PAUSE")
     stopButton.config(state="normal")
     try:
+        arduino.flushInput()
         send_parameters()
         sendArduino("s" + parameters["iniThreshold"].get() + "b" + parameters["iniBaseline"].get()) # déclenche la boucle essai dans arduino et envoie le seuil pour déclencher l essaie
         # t.sleep(8) # permet au buffer d'arduino de se remplir
@@ -419,7 +429,7 @@ def start():
 
 
         # Boucle sans fin
-        # arduino.flushInput()ùù
+        # arduino.flushInput()
         debut = t.time()
         while session_running:
             chronometer(debut)
@@ -462,7 +472,7 @@ def stop_Button():
     startButton.config(text="START")
     stopButton.config(state="disabled")
     try:
-        sendArduino("w")
+        finish_up(False)
         stateList.clear()
     except serial.SerialException:
         disconnected()
@@ -512,6 +522,10 @@ removeOffsetButton.grid(row=0, column=3)
 set_button_size(Cadre3, 10, 2, ('Serif', 10, "bold"))
 
 
+DisplayBox = Label(CadreGauche, text="TextBox", font=("Serif", 12))
+DisplayBox.grid(row=4, column=1, sticky="n", pady=(20,20))
+
+
 # _______________________________________________________________________________
 
 # définition du premier cadre
@@ -547,13 +561,83 @@ Rat_ID = Entry(Cadre1, width=10, textvariable=parameters["ratID"]).grid(row=2, c
 # Calibration = Label(Cadre1, text="Calibration file location:").grid(row=4, column=1)
 # Calib = Entry(Cadre1, ).grid(row=4, column=2)
 # Change = Button(Cadre1, text="Change").grid(row=4, column=3)
+def save_trial_table(filename):
+    global trial_table
+    with open(filename, mode='w', newline='') as csvfile:
+        fieldnames = ["start_time", "init_thresh", "hit_thresh", "Force", "hold_time", "duration", "success", "peak"]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
+        writer.writeheader()
+        print("writing trials")
+        for trial in trial_table:
+            # Convert list of Force values to a string for CSV
+            trial["Force"] = ', '.join(map(str, trial["Force"]))
+            writer.writerow(trial)
+
+def save_file(file_path, dict):
+    saved_parameters = {}
+    for key, value in dict.items():
+        saved_parameters[key] = value.get()
+
+
+    with open(file_path, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        for key, value in saved_parameters.items():
+            writer.writerow([key, value])
+
+    
+
+def display(text):
+    DisplayBox.config(text=text)
+
+
+def save_results(crashed):
+    response = messagebox.askyesno("Confirmation", "Do you want to save the session?")
+    if response:
+        display("yes")
+    else:
+        display("no")
+
+    if crashed:
+        response = messagebox.askyesno("Sorry about that...", "RatPull lever_pull_behavior Crashed!\nSave results?")
+    else:
+        response = messagebox.askyesno("End of Session", "End of behavioral session\nSave results?")
+    
+    rat_dir = os.path.join(parameters["saveFolder"].get(), str(parameters["ratID"].get()))
+    if response:
+        dir_exists = os.path.exists(rat_dir)
+        print(dir_exists)
+        if not dir_exists:
+            display(f'Creating new folder for animal parameters["ratID"].get()\n')
+            dir_exists = os.mkdir(rat_dir)
+            if not dir_exists:
+                display('Failed to create new folder in specifiec location')
+            
+        
+        if dir_exists:
+            ttfname = parameters["ratID"].get() + '_RatPull_trial_table_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.csv'
+            pfname = parameters["ratID"].get() + '_RatPull_params_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.csv'
+
+            print(rat_dir)
+            print(ttfname)
+            save_trial_table(os.path.join(rat_dir, ttfname))
+            # save_file(os.join(rat_dir, ttfname), trial_table)
+            save_file(os.path.join(rat_dir, pfname), parameters)
+
+            display('behavior stats and parameters saved successfully')
+            # update_global_stats(trial_table)
+        else:
+            display('behavior stats and parameters not saved')
+    
 
 def save_session():
     global sensorValueTrial
     global sensorTimeStamp
     dir_target = parameters["savefolder"].get()
     np.savetxt(dir_target, sensorValueTrial, delimiter=",")
+
+def update_global_stats():
+    print("Update global stats")
 
 
 # Save_session = Button(Cadre1, text="Save Session", command=save_session)
@@ -728,8 +812,17 @@ def load_parameters():
     print("Parameters loaded")
     return parameters
 
-def finish_up(trial_table,session_t, num_trials, num_rewards, app, crashed):
-    print("finishing up")
+def finish_up(crashed):
+    display('Session Ended');
+    
+    # reset_buttons(app)
+
+    # trial_table = trial_table(1:num_trials, :);  
+    # trial_table.Properties.CustomProperties.num_trials  = num_trials;
+    # trial_table.Properties.CustomProperties.num_rewards = num_rewards;
+    # trial_table.Properties.CustomProperties.rat_id      = app.rat_id.Value;
+    # display_results(session_t, num_trials, num_rewards, app.num_pellets, app.man_pellets);
+    save_results(crashed);
 
 def save_configuration():
     global parameters
@@ -804,6 +897,8 @@ def entry_changed(*args):
         elif key in ["leverGain", "holdTimeAdapt", "hitThreshAdapt"]:
             if not is_boolean(value.get()):
                 return False
+        elif key in ["saveFolder", "ratID"]:
+            return True
         else:
             if not is_int(value.get()):
                 return False

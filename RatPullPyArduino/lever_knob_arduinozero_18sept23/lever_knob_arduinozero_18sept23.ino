@@ -1,9 +1,4 @@
 // #include <CircularBuffer.h>
-#pragma GCC enable ("-fexceptions")
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpsabi"
-
-// #pragma GCC diagnostic pop
 
 #include <queue>
 #include <chrono>
@@ -18,81 +13,85 @@ using namespace std;
 
 // DECLARATION VARIABLES------------
 
-// code controllers
-bool flash_enabled = false;
-
-const int lenBuffer = 255;
-std::deque<int> dataBuffer(lenBuffer, 0);
-// CircularBuffer<int, lenBuffer> dataBuffer;
+//Settings
 int AnalogIN = A0;
-int leverVal;
-int DL = 10;           // sampling freq
-int DL_Sampling = 10;  // buffer freq : every x ms
-float valMoyenne;
+String serialCommand = "wait";
+
+
+// code controllers
+const int lenBuffer = 255;
+
+//state machine variables
+
 float initTrial;
 float baselineTrial;
-int aveOnLast = 10;
-float ave = 0.0;
 unsigned long startArduinoProg;
 unsigned long startSession;
 unsigned long startTrial;
 unsigned long bufferTimeFreq;
 unsigned long stopTrial;
 unsigned long LastTime;  // le dernier temps du buffer data
-int compteur = 0;
-String serialCommand = "wait";
-bool sendData = false;
 
 auto loop_timer = millis();
 long experiment_start;
 int pause_time = 0;
-//Input Parameters
+
+// - input Parameters
+int num_pellets = 0;
 int num_rewards = 0;
 int num_trials = 0;
-int moduleValue_now = 0;
-int peak_moduleValue = 0;
-auto hold_timer = millis();
-auto it_timer = millis();
-std::vector<std::vector<int>> tmp_value_buffer;    // [time value], first row is oldest data
-std::vector<std::vector<int>> trial_value_buffer;  // [time value]
-std::vector<std::vector<std::vector<int>>> trial_value_buffer2;  // [time value2]
+
 int duration;
 int MaxTrialNum = 100;
+
+int hold_time = 500;
+int trial_hold_time;
 int hold_time_min = 0;
-int hit_thresh_min;
-
-//Initial Parameters
-int num_pellets = 0;
-std::deque<bool> past_10_trials_succ;
-
+int hold_time_max = 1000;
 
 int init_thresh = 0;
-int session_t;
-int session_t_before = 0;
 
-
-int moduleValue_before = 0;
-
-bool trial_started = false;
-int trial_start_time = 0;
-int trial_end_time;
-int trial_time;
-bool success = false;
-bool crashed = false;  // Assuming this variable is declared elsewhere
-int duration_minutes;  // Assuming app.duration.Value is in minutes
-int max_trial_num;
-bool stop_session;
-bool pause_session;
 int hit_thresh;
+int trial_hit_thresh;
+int hit_thresh_min;
+int hit_thresh_max;
+
 int hit_window;
+
 float lever_gain = 1;
 int failure_tolerance = 100;
-int hold_time = 500;
-int hit_thresh_max;
-int hold_time_max = 1000;
+
 bool adapt_hit_thresh;
 bool adapt_hold_time;
 bool adapt_drop_tolerance;
+
+// - lever values
+int moduleValue_before = 0;
+int moduleValue_now = 0;
+int peak_moduleValue = 0;
+
+// - timers
+auto hold_timer = millis();
+auto it_timer = millis();
+int session_t;
+int session_t_before = 0;
+int trial_start_time = 0;
+int trial_end_time;
+int trial_time;
+
+// - buffers
+std::vector<std::vector<int>> tmp_value_buffer;    // [time value], first row is oldest data
+std::vector<std::vector<int>> trial_value_buffer;  // [time value]
+std::deque<bool> past_10_trials_succ;
+
+// - bools
+bool trial_started = false;
+bool success = false;
+bool crashed = false;
+bool stop_session = false;
+bool pause_session = false;
+
+// - hard-coded values
 int post_trial_dur = 1000;
 int inter_trial_dur = 500;
 int buffer_dur = 1000;
@@ -133,119 +132,11 @@ double getBoolMean(deque<bool> bools) {
   return average;
 }
 
-void flash(int number) {
-  if (flash_enabled) {
-    if (number == 0) {
-      digitalWrite(12, LOW);
-      digitalWrite(13, HIGH);
-      delay(3000);
-      digitalWrite(13, LOW);
-      digitalWrite(12, HIGH);
-      delay(3000);
-      digitalWrite(13, LOW);
-      digitalWrite(12, LOW);
-    }
-    else if (number < 0) {
-      fastflash(5);
-      digitalWrite(12, LOW);
-      digitalWrite(13, HIGH);
-      delay(3000);
-      digitalWrite(13, LOW);
-      digitalWrite(12, HIGH);
-      delay(3000);
-      digitalWrite(13, LOW);
-      digitalWrite(12, LOW);
-      fastflash(5);
-    }
-    int time = 350;
-    for (int i = 0; i < number; i++) {
-      digitalWrite(12, LOW);
-      digitalWrite(13, HIGH);
-      delay(time);
-      digitalWrite(13, LOW);
-      digitalWrite(12, HIGH);
-      delay(time);
-      digitalWrite(13, LOW);
-      digitalWrite(12, LOW);
-    }
-    delay(500);
-  }
-  
-}
-void fastflash(int number) {
-  if (flash_enabled) {
-    int time = 100;
-    for (int i = 0; i < number; i++) {
-      digitalWrite(12, LOW);
-      digitalWrite(13, HIGH);
-      delay(time);
-      digitalWrite(13, LOW);
-      digitalWrite(12, HIGH);
-      delay(time);
-      digitalWrite(13, LOW);
-      digitalWrite(12, LOW);
-    }
-    delay(500);
-  }
-  
-}
-
-void flash2Decimal(int number) {
-  if (flash_enabled) {
-    int time = 300;
-    int tens = number / 10;
-    int ones = number - (tens * 10);
-    for (int i = 0; i < tens; i++) {
-      digitalWrite(12, HIGH);
-      delay(time);
-      digitalWrite(12, LOW);
-      delay(time);
-    }
-    for (int i = 0; i < ones; i++) {
-      digitalWrite(13, HIGH);
-      delay(time);
-      digitalWrite(13, LOW);
-      delay(time);
-    }
-    delay(500);
-  }
-  
-}
-
-void flashfloat2Decimal(float number) {
-  int time = 300;
-  int hundreds = number / 100;
-  int tens = (number - (hundreds * 100)) / 10;
-  int ones = number - (tens * 10);
-  for (int i = 0; i < hundreds; i++) {
-    digitalWrite(12, LOW);
-    digitalWrite(13, HIGH);
-    delay(time);
-    digitalWrite(13, LOW);
-    digitalWrite(12, HIGH);
-    delay(time);
-    digitalWrite(13, LOW);
-    digitalWrite(12, LOW);
-  }
-  for (int i = 0; i < tens; i++) {
-    digitalWrite(12, HIGH);
-    delay(time);
-    digitalWrite(12, LOW);
-    delay(time);
-  }
-  for (int i = 0; i < ones; i++) {
-    digitalWrite(13, HIGH);
-    delay(time);
-    digitalWrite(13, LOW);
-    delay(time);
-  }
-  delay(500);
-}
 
 void recordCurrentValue() {
     // update trial_buffer that keeps data 1 second before trial initiation until end of trial:
     if (trial_value_buffer.size() >= lenBuffer) {
-      sendPartialTrialData2Python();
+      sendTrialData2Python(false);
       trial_value_buffer.clear();
       // trial_value_buffer.erase(trial_value_buffer.begin());
     }
@@ -272,7 +163,7 @@ void stateMachine() {
   auto loop_time = millis() - loop_timer;
   if (loop_time > 0.1) {
     // fprintf('--- WARNING --- \nlong delay in while loop (%.0f ms)\n', loop_time * 1000);
-    // send("--- WARNING --- \nlong delay in while loop"); // tmp_value_buffer
+    send("--- WARNING --- \nlong delay in while loop"); // tmp_value_buffer
   }
   loop_timer = millis();
   // experiment time
@@ -315,7 +206,7 @@ void stateMachine() {
       }
 
       else if (stop_session) {
-        // send("Manual Stop");
+        send("Manual Stop");
         NEXT_STATE = STATE_SESSION_END;
       }
       
@@ -407,6 +298,8 @@ void stateMachine() {
       break;
     // STATE_SUCCESS
     case STATE_SUCCESS:
+      trial_hit_thresh = hit_thresh;
+      trial_hold_time = hold_time;
       send("STATE_SUCCESS");
       // we have a success! execute only once
       // fprintf('trial successful! :D\n');
@@ -455,6 +348,8 @@ void stateMachine() {
     // STATE_FAILURE
     case STATE_FAILURE:
       send("STATE_FAILURE");
+      trial_hit_thresh = hit_thresh;
+      trial_hold_time = hold_time;
       // trial failed. execute only once
       // fprintf('trial failed :(\n');
       //TODO
@@ -507,7 +402,7 @@ void stateMachine() {
 
       //should include trial_value_buffer data, first and second column, and a maximum (maybe), number of trials, trial start time, initial threshold, hit threshold, trial_value_buffer,
       //hold  time, trial end time, success, peak_moduleValue
-      sendTrialData2Python();
+      sendTrialData2Python(true);
       trial_started = false;
       // set(app.force_line, 'XData', trial_value_buffer(:, 1), ...
       //     'YData', trial_value_buffer(:, 2),'Visible','on');
@@ -537,9 +432,11 @@ void stateMachine() {
 
       break;
     case STATE_SESSION_END:
+      send("done");
       send("STATE_SESSION_END");
       //TO-DO
       // finish_up(trial_table,session_t, num_trials, num_rewards, app, crashed);
+      
       // exit while loop
       serialCommand = "e";
       break;
@@ -612,18 +509,7 @@ void stateMachine() {
     //     end
   // }
 
-
-float avebuffer(int aveOnLast) {
-  // sort la moyenne des x derniers
-  float ave = 0.0;
-  for (int i = dataBuffer.size() - aveOnLast; i < dataBuffer.size(); i++) {
-    ave += dataBuffer[i];
-  }
-  ave = ave / aveOnLast;
-  return ave;
-}
-
-void sendTrialData2Python() {
+void sendTrialData2Python(bool done) {
   //should include trial_value_buffer data, first and second column, and a maximum (maybe), number of trials, trial start time, initial threshold, hit threshold, trial_value_buffer,
   //hold  time, trial end time, success, peak_moduleValue
   // envoie les données de l'essai : sous la forme ##;##;##;...fin et
@@ -661,76 +547,15 @@ void sendTrialData2Python() {
   SerialUSB.print(String(num_pellets));
   SerialUSB.print(";");
   SerialUSB.print(String(num_rewards));
+  SerialUSB.print(";");
+  SerialUSB.print(String(trial_hold_time));
+  SerialUSB.print(";");
+  SerialUSB.print(String(trial_hit_thresh));
 
-  SerialUSB.println("fin");
-  // code de fin d'envoi de données
-}
-
-void sendPartialTrialData2Python() {
-  //should include trial_value_buffer data, first and second column, and a maximum (maybe), number of trials, trial start time, initial threshold, hit threshold, trial_value_buffer,
-  //hold  time, trial end time, success, peak_moduleValue
-  // envoie les données de l'essai : sous la forme ##;##;##;...fin et
-  // la forme temps correspondant en seconde ligne
-  unsigned long timeStamp;
-  unsigned long StartTime;
-  SerialUSB.flush();
-  // Data
-  String dataDelimiter = "trialData";
-  SerialUSB.print(dataDelimiter);
-  for (int i = 0; i < trial_value_buffer.size(); i++) {
-    SerialUSB.print(trial_value_buffer[i][0]);
-    SerialUSB.print('/');
-    SerialUSB.print(trial_value_buffer[i][1]);
-    SerialUSB.print(';');
+  if (!done) {
+    SerialUSB.print("partialEnd");
   }
 
-  SerialUSB.print("nt");
-  SerialUSB.print(String(num_trials));
-  SerialUSB.print(";");
-  SerialUSB.print(String(trial_start_time));
-  SerialUSB.print(";");
-  SerialUSB.print(String(init_thresh));
-  SerialUSB.print(";");
-  SerialUSB.print(String(hold_time));
-  SerialUSB.print(";");
-  SerialUSB.print(String(hit_thresh));
-  SerialUSB.print(";");
-  SerialUSB.print(String(trial_end_time));
-  SerialUSB.print(";");
-  SerialUSB.print(String(success));
-  SerialUSB.print(";");
-  SerialUSB.print(String(peak_moduleValue));
-  SerialUSB.print(";");
-  SerialUSB.print(String(num_pellets));
-  SerialUSB.print(";");
-  SerialUSB.print(String(num_rewards));
-
-  SerialUSB.println("partialEnd");
-  // code de fin d'envoi de données
-}
-
-void sendData2Python() {
-  // envoie les données de l'essai : sous la forme ##;##;##;...fin et
-  // la forme temps correspondant en seconde ligne
-  unsigned long timeStamp;
-  unsigned long StartTime;
-  SerialUSB.flush();
-  // Data
-  String dataDelimiter = "data";
-  SerialUSB.print(dataDelimiter);
-  for (int i = 0; i < dataBuffer.size(); i++) {
-    SerialUSB.print(dataBuffer[i]);
-    SerialUSB.print(';');
-  }
-  // Temps
-  StartTime = LastTime - (lenBuffer * DL_Sampling);
-  String timeDelimiter = "time";
-  SerialUSB.print(timeDelimiter);
-  for (int i = 0; i < dataBuffer.size(); i++) {
-    timeStamp = StartTime + (i * DL_Sampling);
-    SerialUSB.print(timeStamp);
-    SerialUSB.print(';');
-  }
   SerialUSB.println("fin");
   // code de fin d'envoi de données
 }
@@ -765,23 +590,10 @@ void feed() {
   num_pellets ++;
 }
 
-void fillBuffer() {
-  // Rempli la pile temps et data et retourne la moyenne des n dernières valeurs data
-
-  // rempli le buffer data
-  leverVal = analogRead(AnalogIN);
-  if (dataBuffer.size() >= lenBuffer) {
-    dataBuffer.pop_front();
-  }
-  dataBuffer.push_back(leverVal);
-
-  // Prends en note le dernier temps enregistre dans le buffer
-  LastTime = millis() - startArduinoProg;
-}
 void experimentOn() {
 
   int posIndice;
-
+  reInitialize();
   // Devrait aller dans 'case i' :
   posIndice = serialCommand.indexOf('b');
   initTrial = serialCommand.substring(1, posIndice).toFloat();
@@ -796,13 +608,6 @@ void experimentOn() {
       serialCommand = SerialUSB.readStringUntil('\r');
     }
     stateMachine();
-    // fillBuffer();
-    // // delay(DL_Sampling);
-    // valMoyenne = avebuffer(aveOnLast);
-
-    // if (valMoyenne > initTrial) {
-    //   sendData2Python();
-    // }
   }
 }
 
@@ -830,6 +635,13 @@ bool stringToBool(const std::string& str) {
     // }
 }
 
+void reInitialize() {
+  CURRENT_STATE = STATE_IDLE;
+  NEXT_STATE = CURRENT_STATE; 
+  loop_timer = millis();
+  experiment_start = millis();
+}
+
 
 // INITIALISATION-------------------------------
 void setup() {
@@ -851,16 +663,14 @@ void loop() {
   if (SerialUSB.available() > 0) {
     serialCommand = SerialUSB.readStringUntil('\r');
   }
+  send("here");
 
   switch (serialCommand.charAt(0)) {  // Première lettre de la commande
     case 'w':  // boucle defaut standby
-      send("received stop");
-      stop_session = true 
       break;
     case 'p':  // Initialisation : transmission des paramètres de la tâche à partir de Python
       {
       send("received parameters");
-        // sendArduino("p" + init_thresh + ";" + init_baseline + ";" + min_duration + ";" + hit_window + ";" + hit_thresh)
       string variables;
       variables = serialCommand.substring(1).c_str();
       serialCommand = "";
@@ -887,6 +697,10 @@ void loop() {
     case 's':  // Start
       send("received start");
       experimentOn();
+      break;
+    case 'a':
+      send("received stop");
+      stop_session = true;
       break;
   }
 }
