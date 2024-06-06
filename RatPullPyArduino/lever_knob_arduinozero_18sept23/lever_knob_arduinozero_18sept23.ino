@@ -87,7 +87,7 @@ int hit_thresh;
 int hit_window;
 float lever_gain = 1;
 int failure_tolerance = 100;
-int hold_time = 50;
+int hold_time = 500;
 int hit_thresh_max;
 int hold_time_max = 1000;
 bool adapt_hit_thresh;
@@ -127,10 +127,9 @@ int getMean(std::vector<int> numbers) {
   int average = sum / numbers.size();
   return average;
 }
-int getBoolMean(deque<bool> bools) {
-  int sum = std::accumulate(bools.begin(), bools.end(), 0.0);
-
-  int average = sum / bools.size();
+double getBoolMean(deque<bool> bools) {
+  int sum = std::count(bools.begin(), bools.end(), true);
+  double average = static_cast<double>(sum) / bools.size();
   return average;
 }
 
@@ -256,9 +255,6 @@ void recordCurrentValue() {
     //using before value, because the state before is what decides to start the trial
     values.push_back(moduleValue_now);
     trial_value_buffer.push_back(values);
-
-    // send(String(trial_value_buffer.size()));
-    // send(String(tmp_value_buffer.size()));
     // and keep track of trial peak force
     peak_moduleValue = max(peak_moduleValue, moduleValue_now);
 }
@@ -377,7 +373,7 @@ void stateMachine() {
       break;
     // STATE_TRIAL_STARTED
     case STATE_TRIAL_STARTED:
-      send("STATE_TRIAL_STARTED");
+      // send("STATE_TRIAL_STARTED");
       // check if trial time out (give a chance to continue if force > hit_thresh)
       if (trial_time > hit_window * 1000 && moduleValue_now < hit_thresh) {
         send("trial_time > hit_window && moduleValue_now < hit_thresh");
@@ -404,7 +400,7 @@ void stateMachine() {
       if (moduleValue_now < hit_thresh) {
         hold_timer = millis();
         NEXT_STATE = STATE_TRIAL_STARTED;
-      } else if (getTimerDuration(hold_timer) >= hold_time / 1000) {
+      } else if (getTimerDuration(hold_timer) >= hold_time) {
         // convert from ms to seconds
         NEXT_STATE = STATE_SUCCESS;
       }
@@ -439,7 +435,6 @@ void stateMachine() {
           hit_thresh = min(hit_thresh_max, hit_thresh + 1);
         }
       }
-
       // adapt hold_time
       if (adapt_hold_time) {
         // if success rate 70% or more, increase hit_thresh by 10 ms
@@ -512,7 +507,6 @@ void stateMachine() {
 
       //should include trial_value_buffer data, first and second column, and a maximum (maybe), number of trials, trial start time, initial threshold, hit threshold, trial_value_buffer,
       //hold  time, trial end time, success, peak_moduleValue
-      send("Trial Data");
       sendTrialData2Python();
       trial_started = false;
       // set(app.force_line, 'XData', trial_value_buffer(:, 1), ...
@@ -547,6 +541,7 @@ void stateMachine() {
       //TO-DO
       // finish_up(trial_table,session_t, num_trials, num_rewards, app, crashed);
       // exit while loop
+      serialCommand = "e";
       break;
 
     default:
@@ -555,6 +550,7 @@ void stateMachine() {
       //TO-DO
       // finish_up(trial_table,session_t, num_trials, num_rewards, app, crashed);
       // exit while loop
+      serialCommand = "e";
       break;
   }
 
@@ -628,7 +624,6 @@ float avebuffer(int aveOnLast) {
 }
 
 void sendTrialData2Python() {
-  send("Trial Data");
   //should include trial_value_buffer data, first and second column, and a maximum (maybe), number of trials, trial start time, initial threshold, hit threshold, trial_value_buffer,
   //hold  time, trial end time, success, peak_moduleValue
   // envoie les données de l'essai : sous la forme ##;##;##;...fin et
@@ -672,8 +667,6 @@ void sendTrialData2Python() {
 }
 
 void sendPartialTrialData2Python() {
-  int start = millis();
-  send("Partial Data");
   //should include trial_value_buffer data, first and second column, and a maximum (maybe), number of trials, trial start time, initial threshold, hit threshold, trial_value_buffer,
   //hold  time, trial end time, success, peak_moduleValue
   // envoie les données de l'essai : sous la forme ##;##;##;...fin et
@@ -713,8 +706,6 @@ void sendPartialTrialData2Python() {
   SerialUSB.print(String(num_rewards));
 
   SerialUSB.println("partialEnd");
-  int end = millis();
-  send(String(end - start));
   // code de fin d'envoi de données
 }
 
@@ -795,7 +786,7 @@ void experimentOn() {
   posIndice = serialCommand.indexOf('b');
   initTrial = serialCommand.substring(1, posIndice).toFloat();
   baselineTrial = serialCommand.substring(posIndice + 1).toFloat();
-  while (serialCommand.charAt(0) != 'w') {
+  while (serialCommand.charAt(0) != 'w' && serialCommand.charAt(0) != 'e') {
     if (serialCommand.charAt(0) == 'f') {
       feed();
       serialCommand = "s";
@@ -864,6 +855,7 @@ void loop() {
   switch (serialCommand.charAt(0)) {  // Première lettre de la commande
     case 'w':  // boucle defaut standby
       send("received stop");
+      stop_session = true 
       break;
     case 'p':  // Initialisation : transmission des paramètres de la tâche à partir de Python
       {
@@ -881,14 +873,14 @@ void loop() {
       hit_thresh =stof(parts[4]);
       adapt_hit_thresh = stringToBool(parts[5]);
       hit_thresh_min = stof(parts[6]);
-      hit_thresh_min = stof(parts[7]);
+      hit_thresh_max = stof(parts[7]);
       lever_gain =stof(parts[8]);
       failure_tolerance =stof(parts[9]);
       MaxTrialNum =stof(parts[10]);
       hold_time =stof(parts[11]) * 1000;
       adapt_hold_time= stringToBool(parts[12]);
-      hold_time_min = stof(parts[13]);
-      hold_time_max = stof(parts[14]);
+      hold_time_min = stof(parts[13]) * 1000;
+      hold_time_max = stof(parts[14]) * 1000;
 
       }
       break;
