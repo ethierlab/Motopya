@@ -32,9 +32,7 @@ unsigned long bufferTimeFreq;
 unsigned long stopTrial;
 unsigned long LastTime;  // le dernier temps du buffer data
 
-auto loop_timer = millis();
-long experiment_start;
-int pause_time = 0;
+
 
 // - input Parameters
 int num_pellets = 0;
@@ -78,6 +76,10 @@ int session_t_before = 0;
 int trial_start_time = 0;
 int trial_end_time;
 int trial_time;
+auto pause_timer = millis();
+auto loop_timer = millis();
+long experiment_start;
+long pause_time = 0;
 
 // - buffers
 std::vector<std::vector<int>> tmp_value_buffer;    // [time value], first row is oldest data
@@ -153,27 +155,30 @@ void recordCurrentValue() {
 
 void stateMachine() {
   if (pause_session) {
-    //%accumulate pause_time (in app code) and skip state machine
-    delay(1000);
-    // continue;
+    //%accumulate pause_time and skip state machine
+    pause_time += millis() - pause_timer;
+    pause_timer = millis();
     return;
   }
 
   // warn if longer than expected loop delays
   auto loop_time = millis() - loop_timer;
-  if (loop_time > 0.1) {
+  if (loop_time - pause_time > 100) {
     // fprintf('--- WARNING --- \nlong delay in while loop (%.0f ms)\n', loop_time * 1000);
-    send("--- WARNING --- \nlong delay in while loop"); // tmp_value_buffer
+    send("--- WARNING --- long delay in while loop"); // tmp_value_buffer
   }
   loop_timer = millis();
+
+
   // experiment time
   session_t_before = session_t;
   session_t = millis() - experiment_start - pause_time;
-  // app.TimeelapsedCounterLabel.Text = datestr((session_t) / 86400, 'HH:MM:SS');
+ 
+  //TODO
   // drawnow limitrate;  // process callbacks, update figures at 20Hz max
   //% read module force
   moduleValue_before = moduleValue_now;    // store previous value
-  // moduleValue_now = (app.moto.read_Pull() - app.moto.baseline) * app.lever_gain; % update current value
+
   moduleValue_now = analogRead(AnalogIN) * lever_gain;  // update current value
   // fill force buffertrial_start_time
   // limit temp buffer size to 'buffer_dur' (last 1s of data)+
@@ -194,7 +199,7 @@ void stateMachine() {
   switch (CURRENT_STATE) {
     // STATE_IDLE
     case STATE_IDLE:
-      // send("STATE_IDLE");
+      send("STATE_IDLE");
       if (session_t > duration * 60 * 1000) {
         send(String('Time Out'));
         NEXT_STATE = STATE_SESSION_END;
@@ -234,31 +239,19 @@ void stateMachine() {
       trial_started = true;
       num_trials = num_trials + 1;
 
-      //clear force plot
-      //TO-DO: send data to be drawn in plot in python
-      // set(app.force_line, 'Visible','off');
-      // update_lines_in_fig(app);
-
-      // update GUI counters
-      //TO-DO: send data to python
-      // app.NumTrialsCounterLabel.Text = num2str(num_trials);
 
       // Output one digital pulse for onset of trial
       //TODO
       // app.moto.stim();
 
       
-      // trial_value_buffer = [tmp_value_buffer(1:end - 1, 1) - trial_start_time, tmp_value_buffer(1:end - 1, 2)];
-      
       // start recording force data (%skip last entry, it will be added below after the "if trial_started" section
-      
       //we only want the values from this point on (because the last second will be given by the temporary buffer)
       // trial_value_buffer.clear();
       std::transform(tmp_value_buffer.begin(), tmp_value_buffer.end() - 1, std::back_inserter(trial_value_buffer), [](const std::vector<int>& sublist) { 
         return std::vector<int>{sublist[0] - trial_start_time, sublist[1]};
         }
       );
-      //putting the first value (at 0);
     
       NEXT_STATE = STATE_TRIAL_STARTED;
       break;
@@ -302,7 +295,7 @@ void stateMachine() {
       trial_hold_time = hold_time;
       send("STATE_SUCCESS");
       // we have a success! execute only once
-      // fprintf('trial successful! :D\n');
+      send('trial successful! :D\n');
 
       //TODO
       // play(reward_sound{1});
@@ -339,9 +332,6 @@ void stateMachine() {
       //update stats & update gui
       num_rewards++;
       num_pellets++;
-      //TODO
-      // app.PelletsdeliveredCounterLabel.Text = sprintf('%d (%.3f g)', sum(app.num_pellets) + app.man_pellets, (sum(app.num_pellets) + app.man_pellets) * 0.045); //each pellet 45mg
-      // app.NumRewardsCounterLabel.Text = num2str(num_rewards);
 
       NEXT_STATE = STATE_POST_TRIAL;
       break;
@@ -351,11 +341,9 @@ void stateMachine() {
       trial_hit_thresh = hit_thresh;
       trial_hold_time = hold_time;
       // trial failed. execute only once
-      // fprintf('trial failed :(\n');
+      send('trial failed :(');
       //TODO
       // play(failure_sound{1});
-
-      // past_10_trials_succ = [false, past_10_trials_succ(1:end - 1)];
 
       if (past_10_trials_succ.size() >= 10) {
         past_10_trials_succ.pop_back();
@@ -396,24 +384,8 @@ void stateMachine() {
       send("STATE_PARAM_UPDATE");
       // post trial processing, execute only once.
 
-      // update force plot with new trial data
-
-      //TODO
-
-      //should include trial_value_buffer data, first and second column, and a maximum (maybe), number of trials, trial start time, initial threshold, hit threshold, trial_value_buffer,
-      //hold  time, trial end time, success, peak_moduleValue
       sendTrialData2Python(true);
       trial_started = false;
-      // set(app.force_line, 'XData', trial_value_buffer(:, 1), ...
-      //     'YData', trial_value_buffer(:, 2),'Visible','on');
-      // ymax = max(app.hit_thresh.Value, peak_moduleValue) * 1.25;
-      // ylim(app.moduleValueAxes, [-5 ymax]);
-
-      // // update trial_table
-      // trial_table(num_trials, :) = {trial_start_time, app.init_thresh.Value, app.hit_thresh.Value, trial_value_buffer, ...
-      //     app.hold_time.Value, trial_end_time, success, peak_moduleValue};
-
-      // reset data buffer
       trial_value_buffer.clear();
       peak_moduleValue = 0;
       success = false;
@@ -432,20 +404,19 @@ void stateMachine() {
 
       break;
     case STATE_SESSION_END:
+      send(String(millis()));
       send("done");
       send("STATE_SESSION_END");
-      //TO-DO
-      // finish_up(trial_table,session_t, num_trials, num_rewards, app, crashed);
       
       // exit while loop
       serialCommand = "e";
+      reInitialize();
       break;
 
     default:
       send("default");
       send("error in state machine!");
-      //TO-DO
-      // finish_up(trial_table,session_t, num_trials, num_rewards, app, crashed);
+
       // exit while loop
       serialCommand = "e";
       break;
@@ -458,62 +429,8 @@ void stateMachine() {
   CURRENT_STATE = NEXT_STATE;
 }
 
-// void finish_up(trial_table, session_t, num_trials, num_rewards, app, crashed) {
-// //   //TO-DO
-    // send('Session Ended');
-    
-//     //reset the gui buttons
-//     // reset_buttons(app);
-
-//     // trial_table = trial_table(1:num_trials, :);  
-//     // trial_table.Properties.CustomProperties.num_trials  = num_trials;
-//     // trial_table.Properties.CustomProperties.num_rewards = num_rewards;
-//     // trial_table.Properties.CustomProperties.rat_id      = app.rat_id.Value;
-//     // display_results(session_t, num_trials, num_rewards, app.num_pellets, app.man_pellets);
-//     // save_results(app, trial_table, crashed);
-// }
-
-  // void save_results(app, trial_table, bool crashed) {
-        // if (crashed) {
-        //       SaveButton = questdlg(sprintf('RatPull lever_pull_behavior Crashed!\n Save results?'), 'Sorry about that...', 'Yes','No','Yes');
-        //}
-        //else {
-        //SaveButton = questdlg(sprintf('End of behavioral session\nSave results?'), 'End of Session', 'Yes','No','Yes');
-        //}
-        
-    //     if (SaveButton.compare('Yes'))
-    //         dir_exist = isfolder(fullfile(app.params.save_dir,app.rat_id.Value));
-    //         if ~dir_exist
-    //             fprintf('Creating new folder for animal %s\n',app.rat_id.Value);
-    //             dir_exist = mkdir(app.params.save_dir,app.rat_id.Value);
-    //             if ~dir_exist
-    //                 disp('Failed to create new folder in specifiec location');
-    //             end
-    //         end
-        
-    //         if dir_exist
-    //             ttfname = [app.rat_id.Value,'_RatPull_trial_table_',datestr(datetime('now'),'yyyymmdd_HHMMSS'),'.mat'];
-    //             pfname  = [app.rat_id.Value,'_RatPull_params_',datestr(datetime('now'),'yyyymmdd_HHMMSS'),'.mat'];
-
-    //             params = app.params;
-    //             save(fullfile(app.params.save_dir, app.rat_id.Value, ttfname), 'trial_table');
-    //             save(fullfile(app.params.save_dir, app.rat_id.Value, pfname), '-Struct', 'params');
-
-    //             disp('behavior stats and parameters saved successfully');
-        
-    //             update_global_stats(app,trial_table);
-    //         else
-    //             disp('behavior stats and parameters not saved');
-    //         end
-        
-    //     end
-  // }
 
 void sendTrialData2Python(bool done) {
-  //should include trial_value_buffer data, first and second column, and a maximum (maybe), number of trials, trial start time, initial threshold, hit threshold, trial_value_buffer,
-  //hold  time, trial end time, success, peak_moduleValue
-  // envoie les données de l'essai : sous la forme ##;##;##;...fin et
-  // la forme temps correspondant en seconde ligne
   unsigned long timeStamp;
   unsigned long StartTime;
   SerialUSB.flush();
@@ -526,7 +443,6 @@ void sendTrialData2Python(bool done) {
     SerialUSB.print(trial_value_buffer[i][1]);
     SerialUSB.print(';');
   }
-
   SerialUSB.print("nt");
   SerialUSB.print(String(num_trials));
   SerialUSB.print(";");
@@ -551,36 +467,20 @@ void sendTrialData2Python(bool done) {
   SerialUSB.print(String(trial_hold_time));
   SerialUSB.print(";");
   SerialUSB.print(String(trial_hit_thresh));
-
   if (!done) {
     SerialUSB.print("partialEnd");
   }
-
   SerialUSB.println("fin");
   // code de fin d'envoi de données
 }
 
-void send(String error) {
+void send(String message) {
   unsigned long timeStamp;
   unsigned long StartTime;
   SerialUSB.flush();
-  // Error
   String messageDelimiter = "message";
   SerialUSB.print(messageDelimiter);
-  SerialUSB.print(error);
-  SerialUSB.print(';');
-  SerialUSB.println("fin");
-  // code de fin d'envoi de données
-}
-
-void sendSpec(String error) {
-  unsigned long timeStamp;
-  unsigned long StartTime;
-  SerialUSB.flush();
-  // Error
-  String messageDelimiter = "yumm";
-  SerialUSB.print(messageDelimiter);
-  SerialUSB.print(error);
+  SerialUSB.print(message);
   SerialUSB.print(';');
   SerialUSB.println("fin");
   // code de fin d'envoi de données
@@ -591,7 +491,6 @@ void feed() {
 }
 
 void experimentOn() {
-
   int posIndice;
   reInitialize();
   // Devrait aller dans 'case i' :
@@ -601,6 +500,17 @@ void experimentOn() {
   while (serialCommand.charAt(0) != 'w' && serialCommand.charAt(0) != 'e') {
     if (serialCommand.charAt(0) == 'f') {
       feed();
+      serialCommand = "s";
+    }
+    else if (serialCommand.charAt(0) == 'c') {
+      if (!pause_session) {
+        pause_timer = millis();
+      }
+      else {
+        send("pause time");
+        send(String(pause_time));
+      }
+      pause_session = !pause_session;
       serialCommand = "s";
     }
     delay(5);
@@ -622,7 +532,7 @@ std::vector<std::string> split_string(const std::string& input_string, char deli
 }
 bool stringToBool(const std::string& str) {
     std::string s = str;
-    // Convert the string to lowercase for case-insensitive comparison
+
     std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c){ return std::tolower(c); });
     
     if (s == "true" || s == "1") {
@@ -630,16 +540,26 @@ bool stringToBool(const std::string& str) {
     } else if (s == "false" || s == "0") {
         return false;
     } 
-    // else {
-    //     throw std::invalid_argument("Invalid string for conversion to bool");
-    // }
 }
 
 void reInitialize() {
+  SerialUSB.flush();
   CURRENT_STATE = STATE_IDLE;
   NEXT_STATE = CURRENT_STATE; 
+  tmp_value_buffer.clear();    // [time value], first row is oldest data
+  trial_value_buffer.clear();  // [time value]
+  past_10_trials_succ.clear();
+  num_pellets = 0;
+  num_rewards = 0;
+  num_trials = 0;
+  trial_started = false;
+  success = false;
+  crashed = false;
+  stop_session = false;
+  pause_session = false;
   loop_timer = millis();
   experiment_start = millis();
+  pause_time = 0;
 }
 
 
@@ -647,15 +567,10 @@ void reInitialize() {
 void setup() {
   // put your setup code here, to run once:
   pinMode(AnalogIN, INPUT);
-  pinMode(13, OUTPUT);
-  pinMode(12, OUTPUT);
-  // pinMode(10, OUTPUT);
-  // pinMode(9,OUTPUT);
   SerialUSB.begin(115200);      // baud rate
   startArduinoProg = millis();  // début programme
   loop_timer = millis();
   experiment_start = millis();
-  // trial_value_buffer.resize(255, std::vector<int>(2));
 }
 
 
@@ -663,7 +578,6 @@ void loop() {
   if (SerialUSB.available() > 0) {
     serialCommand = SerialUSB.readStringUntil('\r');
   }
-  send("here");
 
   switch (serialCommand.charAt(0)) {  // Première lettre de la commande
     case 'w':  // boucle defaut standby
@@ -691,7 +605,6 @@ void loop() {
       adapt_hold_time= stringToBool(parts[12]);
       hold_time_min = stof(parts[13]) * 1000;
       hold_time_max = stof(parts[14]) * 1000;
-
       }
       break;
     case 's':  // Start
