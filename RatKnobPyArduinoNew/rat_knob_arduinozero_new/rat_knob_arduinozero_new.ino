@@ -15,8 +15,17 @@ using namespace std;
 
 //Settings
 int AnalogIN = A0;
+const int pinA = 2;  // A output
+const int pinB = 3;  // B output
+const int pinSW1 = 4; // Switch 1
+const int pinSW2 = 5; // Switch 2
 String serialCommand = "wait";
 
+
+int initial;
+int previous;
+int sum = 0;
+int encoderPos = 0;
 
 // code controllers
 const int lenBuffer = 255;
@@ -179,7 +188,8 @@ void stateMachine() {
   //% read module force
   moduleValue_before = moduleValue_now;    // store previous value
 
-  moduleValue_now = analogRead(AnalogIN) * lever_gain;  // update current value
+  // moduleValue_now = analogRead(AnalogIN) * lever_gain;  // update current value
+  moduleValue_now = getEncoderValue();
   // fill force buffertrial_start_time
   // limit temp buffer size to 'buffer_dur' (last 1s of data)+
   // tmp_value_buffer = [tmp_value_buffer(session_t - tmp_value_buffer(:, 1) <= app.buffer_dur, :); session_t moduleValue_now];
@@ -490,6 +500,30 @@ void feed() {
   num_pellets ++;
 }
 
+int getEncoderValue() {
+  int encoderA = digitalRead(pinA);
+  int encoderA2 = digitalRead(pinA);
+  int encoderB = digitalRead(pinB);
+  int encoderC = digitalRead(6);
+  int encoderC2 = analogRead(6);
+  send(String(encoderA) +  String(encoderA2));
+  send(String(encoderC2));
+  previous = sum;
+  sum = encoderA + 2 * encoderB;
+
+  if ((previous == 0 && sum == 1) || (previous == 1 && sum == 3) ||  (previous == 3 && sum == 2) ||  (previous == 2 && sum == 0)){
+    encoderPos ++;
+  }
+  else if ((sum == 0 && previous == 1) || (sum == 1 && previous == 3) ||  (sum == 3 && previous == 2) ||  (sum == 2 && previous == 0)){
+    encoderPos --;
+  }
+
+
+  int angle = ((encoderPos * 360 / 32)); //%360 abs
+  // send(String(angle));
+  return angle;
+}
+
 void experimentOn() {
   int posIndice;
   reInitialize();
@@ -567,6 +601,13 @@ void reInitialize() {
 void setup() {
   // put your setup code here, to run once:
   pinMode(AnalogIN, INPUT);
+  
+  pinMode(pinA, INPUT_PULLUP);// Internal pull-up resistor for switch A
+  pinMode(pinB, INPUT_PULLUP);// Internal pull-up resistor for switch B
+  pinMode(6, INPUT_PULLUP);// Internal pull-up resistor for switch A
+  pinMode(pinSW1, INPUT); 
+  pinMode(pinSW2, INPUT); 
+  
   SerialUSB.begin(115200);      // baud rate
   startArduinoProg = millis();  // début programme
   loop_timer = millis();
