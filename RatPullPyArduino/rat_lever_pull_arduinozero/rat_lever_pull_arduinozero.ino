@@ -19,7 +19,7 @@ String serialCommand = "wait";
 
 
 // code controllers
-const int lenBuffer = 255;
+const int lenBuffer = 280;
 
 //state machine variables
 
@@ -165,7 +165,7 @@ void stateMachine() {
   auto loop_time = millis() - loop_timer;
   if (loop_time - pause_time > 100) {
     // fprintf('--- WARNING --- \nlong delay in while loop (%.0f ms)\n', loop_time * 1000);
-    send("--- WARNING --- long delay in while loop"); // tmp_value_buffer
+    send_message("--- WARNING --- long delay in while loop"); // tmp_value_buffer
   }
   loop_timer = millis();
 
@@ -178,7 +178,6 @@ void stateMachine() {
   // drawnow limitrate;  // process callbacks, update figures at 20Hz max
   //% read module force
   moduleValue_before = moduleValue_now;    // store previous value
-
   moduleValue_now = analogRead(AnalogIN) * lever_gain;  // update current value
   // fill force buffertrial_start_time
   // limit temp buffer size to 'buffer_dur' (last 1s of data)+
@@ -187,31 +186,53 @@ void stateMachine() {
   auto condition = [&](const std::vector<int>& row) {
     return session_t - row[0] <= buffer_dur;
   };
-  std::vector<std::vector<int>> filtered_rows;
-  std::copy_if(tmp_value_buffer.begin(), tmp_value_buffer.end(), std::back_inserter(filtered_rows), condition);
-  if (filtered_rows.size() >= lenBuffer) {
-    filtered_rows.erase(filtered_rows.begin());
+  // send_message("9.75");
+  // send_message("sizes1 trial" + String(trial_value_buffer.size()));
+  // send_message("sizes1 tmp" + String(tmp_value_buffer.size()));
+  tmp_value_buffer.erase(
+      std::remove_if(tmp_value_buffer.begin(), tmp_value_buffer.end(), 
+                      [condition](const std::vector<int>& sublist) {
+                        // send_message(String(condition(sublist)));
+                          return !condition(sublist);
+                      }),
+      tmp_value_buffer.end()
+  );
+  
+
+  if (tmp_value_buffer.size() >= lenBuffer) {
+    tmp_value_buffer.erase(tmp_value_buffer.begin());
   }
-  filtered_rows.push_back({session_t, moduleValue_now});
-  tmp_value_buffer = filtered_rows;
+  tmp_value_buffer.push_back({session_t, moduleValue_now});
+  // send_message(String("sizes2 trial" + trial_value_buffer.size()));
+  // send_message("sizes2 tmp" + String(tmp_value_buffer.size()));
+
+  // std::vector<std::vector<int>> filtered_rows;
+  // std::copy_if(tmp_value_buffer.begin(), tmp_value_buffer.end(), std::back_inserter(filtered_rows), condition);
+  // if (filtered_rows.size() >= lenBuffer) {
+  //   filtered_rows.erase(filtered_rows.begin());
+  // }
+  // filtered_rows.push_back({session_t, moduleValue_now});
+  
+  // tmp_value_buffer = filtered_rows;
+
 
   // STATE MACHINE
   switch (CURRENT_STATE) {
     // STATE_IDLE
     case STATE_IDLE:
-      // send("STATE_IDLE");
+      // send_message("STATE_IDLE");
       if (session_t > duration * 60 * 1000) {
-        send(String('Time Out'));
+        send_message(String('Time Out'));
         NEXT_STATE = STATE_SESSION_END;
       }
 
       else if (num_trials >= MaxTrialNum) {
-        // send("Reached Maximum Number of Trials");
+        // send_message("Reached Maximum Number of Trials");
         NEXT_STATE = STATE_SESSION_END;
       }
 
       else if (stop_session) {
-        send("Manual Stop");
+        send_message("Manual Stop");
         NEXT_STATE = STATE_SESSION_END;
       }
       
@@ -228,13 +249,13 @@ void stateMachine() {
       break;
     //STATE_TRIAL_INIT
     case STATE_TRIAL_INIT:
-      send("STATE_TRIAL_INIT");
+      // send_message("STATE_TRIAL_INIT");
       // trial initiated
       
       //changes from original state machine
       // trial_start_time = session_t;
       
-      // send("Trial initiated... ");
+      // send_message("Trial initiated... ");
       // play(init_sound{1});
       trial_started = true;
       num_trials = num_trials + 1;
@@ -248,38 +269,50 @@ void stateMachine() {
       // start recording force data (%skip last entry, it will be added below after the "if trial_started" section
       //we only want the values from this point on (because the last second will be given by the temporary buffer)
       // trial_value_buffer.clear();
-      std::transform(tmp_value_buffer.begin(), tmp_value_buffer.end() - 1, std::back_inserter(trial_value_buffer), [](const std::vector<int>& sublist) { 
-        return std::vector<int>{sublist[0] - trial_start_time, sublist[1]};
-        }
-      );
-    
+      send_message(String(tmp_value_buffer.size()));
+      if (tmp_value_buffer.size() > 0) {
+        send_message("inside if" + String(tmp_value_buffer.size()));
+          std::transform(tmp_value_buffer.begin(), tmp_value_buffer.end() - 1, std::back_inserter(trial_value_buffer), [](const std::vector<int>& sublist) { 
+          return std::vector<int>{sublist[0] - trial_start_time, sublist[1]};
+          }
+        );
+        send_message("sending just the tmp_buffer");
+        sendTrialData2Python(false);
+        trial_value_buffer.clear();
+      }
+      else {
+        send_message("size 0");
+      }
+      
+      // send_message("12");
       NEXT_STATE = STATE_TRIAL_STARTED;
+      send_message("after");
       break;
     // STATE_TRIAL_STARTED
     case STATE_TRIAL_STARTED:
-      // send("STATE_TRIAL_STARTED");
+      // send_message("STATE_TRIAL_STARTED");
       // check if trial time out (give a chance to continue if force > hit_thresh)
       if (trial_time > hit_window * 1000 && moduleValue_now < hit_thresh) {
-        send("trial_time > hit_window && moduleValue_now < hit_thresh");
+        send_message("trial_time > hit_window && moduleValue_now < hit_thresh");
         NEXT_STATE = STATE_FAILURE;
       }
       // check if force decreased from peak too much
       else if (moduleValue_now <= (peak_moduleValue - failure_tolerance)) {
-        send("moduleValue_now <= (peak_moduleValue - failure_tolerance)");
-        // send(String(peak_moduleValue));
+        send_message("moduleValue_now <= (peak_moduleValue - failure_tolerance)");
+        // send_message(String(peak_moduleValue));
         NEXT_STATE = STATE_FAILURE;
       }
       // check if hit threshold has been reached
       else if (moduleValue_now >= hit_thresh) {
         digitalWrite(13, HIGH);
-        send("moduleValue_now >= hit_thresh");
+        send_message("moduleValue_now >= hit_thresh");
         hold_timer = millis();
         NEXT_STATE = STATE_HOLD;
       }
       break;
     // STATE_HOLD
     case STATE_HOLD:
-      send("STATE_HOLD");
+      // send_message("STATE_HOLD");
       //check if still in reward zone
       if (moduleValue_now < hit_thresh) {
         hold_timer = millis();
@@ -293,9 +326,9 @@ void stateMachine() {
     case STATE_SUCCESS:
       trial_hit_thresh = hit_thresh;
       trial_hold_time = hold_time;
-      send("STATE_SUCCESS");
+      send_message("STATE_SUCCESS");
       // we have a success! execute only once
-      send("trial successful! :D\n");
+      send_message("trial successful! :D\n");
 
       //TODO
       // play(reward_sound{1});
@@ -337,11 +370,11 @@ void stateMachine() {
       break;
     // STATE_FAILURE
     case STATE_FAILURE:
-      send("STATE_FAILURE");
+      send_message("STATE_FAILURE");
       trial_hit_thresh = hit_thresh;
       trial_hold_time = hold_time;
       // trial failed. execute only once
-      send("trial failed :(");
+      send_message("trial failed :(");
       //TODO
       // play(failure_sound{1});
 
@@ -373,7 +406,7 @@ void stateMachine() {
       break;
     // STATE_POST_TRIAL
     case STATE_POST_TRIAL:
-      // send("STATE_POST_TRIAL");
+      // send_message("STATE_POST_TRIAL");
       // wait to accumulate a bit of post_trial data
       if (trial_time - trial_end_time >= post_trial_dur) {
         NEXT_STATE = STATE_PARAM_UPDATE;
@@ -381,7 +414,7 @@ void stateMachine() {
       break;
     // STATE_PARAM_UPDATE
     case STATE_PARAM_UPDATE:
-      send("STATE_PARAM_UPDATE");
+      send_message("STATE_PARAM_UPDATE");
       // post trial processing, execute only once.
 
       sendTrialData2Python(true);
@@ -395,7 +428,7 @@ void stateMachine() {
       break;
     // STATE_INTER_TRIAL
     case STATE_INTER_TRIAL:
-      // send("STATE_INTER_TRIAL");
+      // send_message("STATE_INTER_TRIAL");
       // wait a short period of time between trials
       if (getTimerDuration(it_timer) >= inter_trial_dur) {
         it_timer = millis();
@@ -404,9 +437,9 @@ void stateMachine() {
 
       break;
     case STATE_SESSION_END:
-      send(String(millis()));
-      send("done");
-      send("STATE_SESSION_END");
+      send_message(String(millis()));
+      send_message("done");
+      send_message("STATE_SESSION_END");
       
       // exit while loop
       serialCommand = "e";
@@ -414,18 +447,17 @@ void stateMachine() {
       break;
 
     default:
-      send("default");
-      send("error in state machine!");
+      send_message("default");
+      send_message("error in state machine!");
 
       // exit while loop
       serialCommand = "e";
       break;
   }
-
   if (trial_started) {
     recordCurrentValue();
-  }
 
+  }
   CURRENT_STATE = NEXT_STATE;
 }
 
@@ -433,11 +465,13 @@ void stateMachine() {
 void sendTrialData2Python(bool done) {
   unsigned long timeStamp;
   unsigned long StartTime;
-  SerialUSB.flush();
+  // SerialUSB.flush();
   // Data
+  send_message(String(trial_value_buffer[1][0]) + " " + String(trial_value_buffer[1][1]) + " " + trial_value_buffer.size());
   String dataDelimiter = "trialData";
   SerialUSB.print(dataDelimiter);
   for (int i = 0; i < trial_value_buffer.size(); i++) {
+
     SerialUSB.print(trial_value_buffer[i][0]);
     SerialUSB.print("/");
     SerialUSB.print(trial_value_buffer[i][1]);
@@ -471,19 +505,26 @@ void sendTrialData2Python(bool done) {
     SerialUSB.print("partialEnd");
   }
   SerialUSB.println("fin");
+
+  SerialUSB.flush();
   // code de fin d'envoi de données
 }
 
-void send(String message) {
-  unsigned long timeStamp;
-  unsigned long StartTime;
-  SerialUSB.flush();
-  String messageDelimiter = "message";
-  SerialUSB.print(messageDelimiter);
-  SerialUSB.print(message);
-  SerialUSB.print(";");
-  SerialUSB.println("fin");
-  // code de fin d'envoi de données
+long h = 0;
+
+void send_message(const String& message) {
+  if (h % 1 == 0) {
+    String messageDelimiter = "message";
+    SerialUSB.print(messageDelimiter);
+    SerialUSB.print(message);
+    SerialUSB.print(";");
+    SerialUSB.println("fin");
+
+    SerialUSB.flush();
+    // code de fin d'envoi de données
+  }
+  h += 1;
+  
 }
 
 void feed() {
@@ -507,13 +548,13 @@ void experimentOn() {
         pause_timer = millis();
       }
       else {
-        send("pause time");
-        send(String(pause_time));
+        send_message("pause time");
+        send_message(String(pause_time));
       }
       pause_session = !pause_session;
       serialCommand = "s";
     }
-    delay(5);
+    // delay(5);
     if (SerialUSB.available() > 0) {
       serialCommand = SerialUSB.readStringUntil('\r');
     }
@@ -584,7 +625,7 @@ void loop() {
       break;
     case 'p':  // Initialisation : transmission des paramètres de la tâche à partir de Python
       {
-      send("received parameters");
+      send_message("received parameters");
       string variables;
       variables = serialCommand.substring(1).c_str();
       serialCommand = "";
@@ -608,11 +649,11 @@ void loop() {
       }
       break;
     case 's':  // Start
-      send("received start");
+      send_message("received start");
       experimentOn();
       break;
     case 'a':
-      send("received stop");
+      send_message("received stop");
       stop_session = true;
       break;
   }

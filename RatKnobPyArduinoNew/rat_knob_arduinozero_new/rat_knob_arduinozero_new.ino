@@ -15,8 +15,12 @@ using namespace std;
 
 //Settings
 int AnalogIN = A0;
+int AnalogINA = A1;
+int AnalogINB = A2;
+int AnalogINC = A3;
 const int pinA = 2;  // A output
 const int pinB = 3;  // B output
+const int pinC = 7;
 const int pinSW1 = 4; // Switch 1
 const int pinSW2 = 5; // Switch 2
 String serialCommand = "wait";
@@ -502,25 +506,24 @@ void feed() {
 
 int getEncoderValue() {
   int encoderA = digitalRead(pinA);
-  int encoderA2 = digitalRead(pinA);
   int encoderB = digitalRead(pinB);
-  int encoderC = digitalRead(6);
-  int encoderC2 = analogRead(6);
-  send(String(encoderA) +  String(encoderA2));
-  send(String(encoderC2));
-  previous = sum;
-  sum = encoderA + 2 * encoderB;
 
-  if ((previous == 0 && sum == 1) || (previous == 1 && sum == 3) ||  (previous == 3 && sum == 2) ||  (previous == 2 && sum == 0)){
-    encoderPos ++;
+  // send(String(encoderA) +  " " +  String(encoderB));
+
+  sum = 2 * encoderA +  encoderB;
+
+  if (encoderA != previous) {
+    if (encoderB != encoderA) {
+      encoderPos ++;
+    }
+    else {
+      encoderPos --;
+    }
   }
-  else if ((sum == 0 && previous == 1) || (sum == 1 && previous == 3) ||  (sum == 3 && previous == 2) ||  (sum == 2 && previous == 0)){
-    encoderPos --;
-  }
 
-
-  int angle = ((encoderPos * 360 / 32)); //%360 abs
-  // send(String(angle));
+  previous = encoderA;
+  int angle = ((encoderPos)); //%360 abs
+  send(String(angle));
   return angle;
 }
 
@@ -601,12 +604,15 @@ void reInitialize() {
 void setup() {
   // put your setup code here, to run once:
   pinMode(AnalogIN, INPUT);
+  pinMode(AnalogINA, INPUT);
+  pinMode(AnalogINB, INPUT);
+  pinMode(AnalogINC, INPUT);
   
-  pinMode(pinA, INPUT_PULLUP);// Internal pull-up resistor for switch A
-  pinMode(pinB, INPUT_PULLUP);// Internal pull-up resistor for switch B
-  pinMode(6, INPUT_PULLUP);// Internal pull-up resistor for switch A
-  pinMode(pinSW1, INPUT); 
-  pinMode(pinSW2, INPUT); 
+  pinMode(pinA, INPUT);// Internal pull-up resistor for switch A
+  pinMode(pinB, INPUT);// Internal pull-up resistor for switch B
+  pinMode(pinC, INPUT);// Internal pull-up resistor for switch A
+  // pinMode(pinSW1, INPUT); 
+  // pinMode(pinSW2, INPUT); 
   
   SerialUSB.begin(115200);      // baud rate
   startArduinoProg = millis();  // début programme

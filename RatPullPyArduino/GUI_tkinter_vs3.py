@@ -44,7 +44,7 @@ session = {}
 
 
 global buffer_size
-buffer_size = 500
+buffer_size = 5000
 
 dataDeque = deque([0] * buffer_size, maxlen=buffer_size)
 timeDeque = deque([0] * buffer_size, maxlen=buffer_size) 
@@ -81,7 +81,7 @@ def connectArduino():
         print("Serial Number:", port.serial_number)
         print("===================================")
         
-        if "arduino" in port.description.lower():
+        if "arduino" in port.description.lower() or "arduino" in port.manufacturer.lower():
             print(port.description.lower())
             description = port.description
             print(description)
@@ -235,10 +235,11 @@ def readArduinoLine():
         return True, dataArray, timeArray
     elif ("message" in output):
         output = output.removeprefix("message")
+        print("here")
         output = output.removesuffix(";fin\r\n")
-        stateList.append(output)
+        stateList.append(output)    
         print("*\n*")
-        print(stateList)
+        print(stateList[-100:])
         if ("done" in output):
             stop_Button()
         return False, np.zeros(buffer_size), np.zeros(buffer_size)
@@ -437,6 +438,7 @@ def start():
             updateDisplayValues()
             try:
                 if arduino.inWaiting() > 1:
+                    print("waiting")
                     readArduinoInput()
                 top.update()
             except serial.SerialException:
