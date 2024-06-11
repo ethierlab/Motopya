@@ -44,7 +44,7 @@ session = {}
 
 
 global buffer_size
-buffer_size = 5000
+buffer_size = 100000
 
 dataDeque = deque([0] * buffer_size, maxlen=buffer_size)
 timeDeque = deque([0] * buffer_size, maxlen=buffer_size) 
@@ -173,13 +173,17 @@ def readArduinoLine():
             print(output)
         data = output.split(";nt", 1)
         trial_data = data[0].split(";")
+        print(trial_data)
         # dataDeque = deque([0] * buffer_size, maxlen=buffer_size)
         # timeDeque = deque([0] * buffer_size, maxlen=buffer_size) 
         for pair in trial_data:
             if pair:  # Ignore empty strings
+                print(pair)
                 time, value = pair.split('/')
                 dataDeque.extend([value])
                 timeDeque.extend([time])
+
+        
 
         dataArray = np.array(dataDeque).astype(float) 
         timeArray = np.array(timeDeque).astype(float)
