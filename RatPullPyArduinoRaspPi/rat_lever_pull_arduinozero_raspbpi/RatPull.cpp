@@ -627,14 +627,64 @@ void reInitialize() {
 
 
 // INITIALISATION-------------------------------
+int initSerial(const char* port, int baud) {
+    int fd = open(port, O_RDWR | O_NOCTTY | O_NDELAY);
+    if (fd == -1) {
+        std::cerr << "Failed to open serial port" << std::endl;
+        return -1;
+    }
+
+    termios options;
+    tcgetattr(fd, &options);
+    cfsetispeed(&options, baud);
+    cfsetospeed(&options, baud);
+    options.c_cflag |= (CLOCAL | CREAD);
+    options.c_cflag &= ~PARENB;
+    options.c_cflag &= ~CSTOPB;
+    options.c_cflag &= ~CSIZE;
+    options.c_cflag |= CS8;
+    options.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);
+    options.c_iflag &= ~(IXON | IXOFF | IXANY);
+    options.c_oflag &= ~OPOST;
+    tcsetattr(fd, TCSANOW, &options);
+
+    return fd;
+}
+
+// Function to read from serial
+std::string readSerial(int fd) {
+    char buffer[256];
+    int n = read(fd, buffer, sizeof(buffer) - 1);
+    if (n < 0) {
+        std::cerr << "Failed to read from serial port" << std::endl;
+        return "";
+    } else {
+        buffer[n] = '\0';
+        return std::string(buffer);
+    }
+}
+
+// Function to write to serial
+void writeSerial(int fd, const std::string &data) {
+    int n = write(fd, data.c_str(), data.length());
+    if (n < 0) {
+        std::cerr << "Failed to write to serial port" << std::endl;
+    }
+}
+
 
 int main() {
 	// Initialize wiringPi library and serial port
-	wiringPiSetup();
-   int serialPort = serialOpen(SERIAL_PORT, 115200);
-    
+	if (wiringPiSetup() == -1) {
+        std::cerr << "WiringPi setup failed" << std::endl;
+        return 1;
+  }
+  int serialPort = initSerial(SERIAL_PORT, 115200);
+  if (serialPort == -1) {
+        return 1;
+    }
    // Set pin modes
-   pinMode(AnalogIN, INPUT);
+  pinMode(AnalogIN, INPUT);
    //pinMode(OUTPUT_PIN, OUTPUT);
 	
 	
@@ -645,52 +695,66 @@ int main() {
   //loop_timer = millis();
   //experiment_start = millis();
   
-  while(1) {
+  while(true) {
+    std::string input = readSerial(serialPort);
+    if (!input.empty()) {
+            std::cout << "Received: " << input << std::endl;
+
+            // Example: Toggle LED based on input
+            if (input == "on") {
+                writeSerial(serialFd, "LED is ON\n");
+            } else if (input == "off") {
+                digitalWrite(LED_PIN, LOW);
+                writeSerial(serialFd, "LED is OFF\n");
+            } else {
+                writeSerial(serialFd, "Unknown command\n");
+            }
+        }
 	  if (SerialUSB.available() > 0) {
-		serialCommand = SerialUSB.readStringUntil('\r');
+		  serialCommand = SerialUSB.readStringUntil('\r');
 	  }
 
 	  switch (serialCommand.charAt(0)) {  // Première lettre de la commande
-		case 'w':  // boucle defaut standby
-		  break;
-		case 'p':  // Initialisation : transmission des paramètres de la tâche à partir de Python
-		  {
-		  send_message("received parameters");
-		  string variables;
-		  variables = serialCommand.substring(1).c_str();
-		  serialCommand = "";
-		  std::vector<std::string> parts = split_string(variables, ';');
-		  initTrial = stof(parts[0]);
-		  init_thresh = stoi(parts[0]);
-		  baselineTrial = stof(parts[1]);
-		  duration = stof(parts[2]);
-		  hit_window = stof(parts[3]);
-		  hit_thresh =stof(parts[4]);
-		  adapt_hit_thresh = stringToBool(parts[5]);
-		  hit_thresh_min = stof(parts[6]);
-		  hit_thresh_max = stof(parts[7]);
-		  lever_gain =stof(parts[8]);
-		  failure_tolerance =stof(parts[9]);
-		  MaxTrialNum =stof(parts[10]);
-		  hold_time =stof(parts[11]) * 1000;
-		  adapt_hold_time= stringToBool(parts[12]);
-		  hold_time_min = stof(parts[13]) * 1000;
-		  hold_time_max = stof(parts[14]) * 1000;
-		  }
-		  break;
-		case 's':  // Start
-		  send_message("received start");
-		  experimentOn();
-		  break;
-		case 'a':
-		  send_message("received stop");
-		  stop_session = true;
-		  break;
-	  }
+		  case 'w':  // boucle defaut standby
+		    break;
+		  case 'p':  // Initialisation : transmission des paramètres de la tâche à partir de Python
+		    {
+        send_message("received parameters");
+        string variables;
+        variables = serialCommand.substring(1).c_str();
+        serialCommand = "";
+        std::vector<std::string> parts = split_string(variables, ';');
+        initTrial = stof(parts[0]);
+        init_thresh = stoi(parts[0]);
+        baselineTrial = stof(parts[1]);
+        duration = stof(parts[2]);
+        hit_window = stof(parts[3]);
+        hit_thresh =stof(parts[4]);
+        adapt_hit_thresh = stringToBool(parts[5]);
+        hit_thresh_min = stof(parts[6]);
+        hit_thresh_max = stof(parts[7]);
+        lever_gain =stof(parts[8]);
+        failure_tolerance =stof(parts[9]);
+        MaxTrialNum =stof(parts[10]);
+        hold_time =stof(parts[11]) * 1000;
+        adapt_hold_time= stringToBool(parts[12]);
+        hold_time_min = stof(parts[13]) * 1000;
+        hold_time_max = stof(parts[14]) * 1000;
+      }
+       break;
+      case 's':  // Start
+        send_message("received start");
+        experimentOn();
+        break;
+      case 'a':
+        send_message("received stop");
+        stop_session = true;
+        break;
+        }
 	}
 	  
-  }
 }
+
 //void setup() {
   //// put your setup code here, to run once:
   //pinMode(AnalogIN, INPUT);

@@ -1,0 +1,5 @@
+hit_window,2
+hit_thresh,30
+init_thresh,15
+init_baseline,1
+duration,30

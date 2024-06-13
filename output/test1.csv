@@ -1,0 +1,15 @@
+iniThreshold,20
+iniBaseline,1
+minDuration,30
+hitWindow,2
+hitThresh,250
+hitThreshAdapt,True
+hitThreshMin,300
+hitThreshMax,700
+leverGain,0.3519
+forceDrop,1000
+maxTrials,30
+holdTime,0.5
+holdTimeAdapt,True
+holdTimeMin,0
+holdTimeMax,1
