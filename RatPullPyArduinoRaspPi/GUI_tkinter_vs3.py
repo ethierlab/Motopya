@@ -72,26 +72,28 @@ def connectArduino():
     clear_stats()
     ports = serial.tools.list_ports.comports()
     port_found = None
-    for port in ports:
-        print("Port:", port.device)
-        print("Description:", port.description)
-        print("Hardware ID:", port.hwid)
-        print("Manufacturer:", port.manufacturer)
-        print("Product:", port.product)
-        print("Serial Number:", port.serial_number)
-        print("===================================")
+    # for port in ports:
+        # print("Port:", port.device)
+        # print("Description:", port.description)
+        # print("Hardware ID:", port.hwid)
+        # print("Manufacturer:", port.manufacturer)
+        # print("Product:", port.product)
+        # print("Serial Number:", port.serial_number)
+        # print("===================================")
         
-        if "arduino" in port.description.lower() or "arduino" in port.manufacturer.lower():
-            print(port.description.lower())
-            description = port.description
-            print(description)
-            port_found = port.device
+        # if "arduino" in port.description.lower() or "arduino" in port.manufacturer.lower():
+            # print(port.description.lower())
+            # description = port.description
+            # print(description)
+            # port_found = port.device
+    port_found = '/dev/serial0'
+    description = "the raspberry pi"
     if port_found == None:
-        print("Arduino not found")
+        print("Device not found")
         lamp.turn_off()
         return
     else:
-        print(f"Arduino found at port {port_found} in description {description}")
+        print(f"Device found at port {port_found} in description {description}")
         lamp.turn_on()
         
 
