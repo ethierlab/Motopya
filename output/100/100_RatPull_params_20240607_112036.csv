@@ -1,0 +1,17 @@
+iniThreshold,100
+iniBaseline,1
+minDuration,30
+hitWindow,2
+hitThresh,502
+hitThreshAdapt,True
+hitThreshMin,300
+hitThreshMax,1000
+leverGain,1
+forceDrop,1000
+maxTrials,3
+holdTime,0.52
+holdTimeAdapt,True
+holdTimeMin,0
+holdTimeMax,1
+saveFolder,C:/Users/Computer_F6454-2/Documents/GitHub/RatPullPy/testing
+ratID,100
