@@ -134,6 +134,16 @@ int getTimerDuration(int start) {
   return millis() - start;
 }
 
+unsigned long millis() {
+    using namespace std::chrono;
+    // Get the current time point
+    static auto start = steady_clock::now();
+    auto now = steady_clock::now();
+    // Calculate the duration in milliseconds
+    auto duration = duration_cast<milliseconds>(now - start);
+    return duration.count();
+}
+
 int getMean(std::vector<int> numbers) {
   int sum = std::accumulate(numbers.begin(), numbers.end(), 0.0);
 
@@ -691,46 +701,46 @@ int main() {
 //}
 
 
-void loop() {
-  if (SerialUSB.available() > 0) {
-    serialCommand = SerialUSB.readStringUntil('\r');
-  }
+// void loop() {
+//   if (SerialUSB.available() > 0) {
+//     serialCommand = SerialUSB.readStringUntil('\r');
+//   }
 
-  switch (serialCommand.charAt(0)) {  // Première lettre de la commande
-    case 'w':  // boucle defaut standby
-      break;
-    case 'p':  // Initialisation : transmission des paramètres de la tâche à partir de Python
-      {
-      send_message("received parameters");
-      string variables;
-      variables = serialCommand.substring(1).c_str();
-      serialCommand = "";
-      std::vector<std::string> parts = split_string(variables, ';');
-      initTrial = stof(parts[0]);
-      init_thresh = stoi(parts[0]);
-      baselineTrial = stof(parts[1]);
-      duration = stof(parts[2]);
-      hit_window = stof(parts[3]);
-      hit_thresh =stof(parts[4]);
-      adapt_hit_thresh = stringToBool(parts[5]);
-      hit_thresh_min = stof(parts[6]);
-      hit_thresh_max = stof(parts[7]);
-      lever_gain =stof(parts[8]);
-      failure_tolerance =stof(parts[9]);
-      MaxTrialNum =stof(parts[10]);
-      hold_time =stof(parts[11]) * 1000;
-      adapt_hold_time= stringToBool(parts[12]);
-      hold_time_min = stof(parts[13]) * 1000;
-      hold_time_max = stof(parts[14]) * 1000;
-      }
-      break;
-    case 's':  // Start
-      send_message("received start");
-      experimentOn();
-      break;
-    case 'a':
-      send_message("received stop");
-      stop_session = true;
-      break;
-  }
-}
+//   switch (serialCommand.charAt(0)) {  // Première lettre de la commande
+//     case 'w':  // boucle defaut standby
+//       break;
+//     case 'p':  // Initialisation : transmission des paramètres de la tâche à partir de Python
+//       {
+//       send_message("received parameters");
+//       string variables;
+//       variables = serialCommand.substring(1).c_str();
+//       serialCommand = "";
+//       std::vector<std::string> parts = split_string(variables, ';');
+//       initTrial = stof(parts[0]);
+//       init_thresh = stoi(parts[0]);
+//       baselineTrial = stof(parts[1]);
+//       duration = stof(parts[2]);
+//       hit_window = stof(parts[3]);
+//       hit_thresh =stof(parts[4]);
+//       adapt_hit_thresh = stringToBool(parts[5]);
+//       hit_thresh_min = stof(parts[6]);
+//       hit_thresh_max = stof(parts[7]);
+//       lever_gain =stof(parts[8]);
+//       failure_tolerance =stof(parts[9]);
+//       MaxTrialNum =stof(parts[10]);
+//       hold_time =stof(parts[11]) * 1000;
+//       adapt_hold_time= stringToBool(parts[12]);
+//       hold_time_min = stof(parts[13]) * 1000;
+//       hold_time_max = stof(parts[14]) * 1000;
+//       }
+//       break;
+//     case 's':  // Start
+//       send_message("received start");
+//       experimentOn();
+//       break;
+//     case 'a':
+//       send_message("received stop");
+//       stop_session = true;
+//       break;
+//   }
+// }
