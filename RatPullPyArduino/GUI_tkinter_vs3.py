@@ -44,7 +44,7 @@ session = {}
 
 
 global buffer_size
-buffer_size = 100000
+buffer_size = 10000
 
 dataDeque = deque([0] * buffer_size, maxlen=buffer_size)
 timeDeque = deque([0] * buffer_size, maxlen=buffer_size) 
