@@ -245,6 +245,21 @@ void stateMachine() {
         trial_start_time = session_t;
 
         trial_started = true;
+        num_trials = num_trials + 1;
+
+        if (tmp_value_buffer.size() > 0) {
+          send_message("inside if" + String(tmp_value_buffer.size()));
+          std::transform(tmp_value_buffer.begin(), tmp_value_buffer.end() - 1, std::back_inserter(trial_value_buffer), [](const std::vector<int>& sublist) { 
+            return std::vector<int>{sublist[0] - trial_start_time, sublist[1]};
+            }
+          );
+          send_message("sending just the tmp_buffer");
+          sendTrialData2Python(false);
+          trial_value_buffer.clear();
+        }
+        else {
+          send_message("size 0");
+        }
       }
       break;
     //STATE_TRIAL_INIT
@@ -257,32 +272,34 @@ void stateMachine() {
       
       // send_message("Trial initiated... ");
       // play(init_sound{1});
-      trial_started = true;
-      num_trials = num_trials + 1;
+
+      //changes from original state machine
+      // trial_started = true;
+      // num_trials = num_trials + 1;
 
 
       // Output one digital pulse for onset of trial
       //TODO
       // app.moto.stim();
 
-      
+      //changes from original state machine
       // start recording force data (%skip last entry, it will be added below after the "if trial_started" section
       //we only want the values from this point on (because the last second will be given by the temporary buffer)
       // trial_value_buffer.clear();
       send_message(String(tmp_value_buffer.size()));
-      if (tmp_value_buffer.size() > 0) {
-        send_message("inside if" + String(tmp_value_buffer.size()));
-          std::transform(tmp_value_buffer.begin(), tmp_value_buffer.end() - 1, std::back_inserter(trial_value_buffer), [](const std::vector<int>& sublist) { 
-          return std::vector<int>{sublist[0] - trial_start_time, sublist[1]};
-          }
-        );
-        send_message("sending just the tmp_buffer");
-        sendTrialData2Python(false);
-        trial_value_buffer.clear();
-      }
-      else {
-        send_message("size 0");
-      }
+      // if (tmp_value_buffer.size() > 0) {
+      //   send_message("inside if" + String(tmp_value_buffer.size()));
+      //     std::transform(tmp_value_buffer.begin(), tmp_value_buffer.end() - 1, std::back_inserter(trial_value_buffer), [](const std::vector<int>& sublist) { 
+      //     return std::vector<int>{sublist[0] - trial_start_time, sublist[1]};
+      //     }
+      //   );
+      //   send_message("sending just the tmp_buffer");
+      //   sendTrialData2Python(false);
+      //   trial_value_buffer.clear();
+      // }
+      // else {
+      //   send_message("size 0");
+      // }
       
       // send_message("12");
       NEXT_STATE = STATE_TRIAL_STARTED;

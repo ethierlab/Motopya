@@ -49,6 +49,8 @@ unsigned long LastTime;  // le dernier temps du buffer data
 
 
 // - input Parameters
+bool input_type = true;
+
 int num_pellets = 0;
 int num_rewards = 0;
 int num_trials = 0;
@@ -195,9 +197,10 @@ void stateMachine() {
   // drawnow limitrate;  // process callbacks, update figures at 20Hz max
   //% read module force
   moduleValue_before = moduleValue_now;    // store previous value
-  // moduleValue_now = analogRead(AnalogIN) * lever_gain;  // update current value
+  if (input_type) {
+    moduleValue_now = analogRead(AnalogIN) * lever_gain;  // update current value
+  }
 
-  // moduleValue_now = getEncoderValue();
   // fill force buffertrial_start_time
   // limit temp buffer size to 'buffer_dur' (last 1s of data)+
   // tmp_value_buffer = [tmp_value_buffer(session_t - tmp_value_buffer(:, 1) <= app.buffer_dur, :); session_t moduleValue_now];
@@ -565,7 +568,7 @@ void updateEncoderValue() {
   int encoderA = digitalRead(pinA);
   int encoderB = digitalRead(pinB);
 
-  // send(String(encoderA) +  " " +  String(encoderB));
+  // send_message(String(encoderA) +  " " +  String(encoderB));
 
   if (encoderA != previousA && previousA != -1) {
     if (encoderB != encoderA) {
@@ -591,7 +594,6 @@ void updateEncoderValue() {
     }
   }
 
-  
   previousA = encoderA;
   previousB = encoderB;
   
@@ -611,6 +613,7 @@ void updateEncoderValue() {
 int getEncoderValue() {
   int encoderA = digitalRead(pinA);
   int encoderB = digitalRead(pinB);
+  send_message(String(encoderA) + String(encoderB));
 
   // send(String(encoderA) +  " " +  String(encoderB));
 
@@ -656,9 +659,8 @@ void experimentOn() {
   posIndice = serialCommand.indexOf('b');
   initTrial = serialCommand.substring(1, posIndice).toFloat();
   baselineTrial = serialCommand.substring(posIndice + 1).toFloat();
-  send_message("before");
   
-  send_message("after");
+  send_message("serialcommand" + serialCommand);
   while (serialCommand.charAt(0) != 'w' && serialCommand.charAt(0) != 'e') {
     if (serialCommand.charAt(0) == 'f') {
       feed();
@@ -675,9 +677,14 @@ void experimentOn() {
       pause_session = !pause_session;
       serialCommand = "s";
     }
+    else if (serialCommand.charAt(0) == 'a'){
+      send_message("received stop");
+      stop_session = true;
+    }
     // delay(5);
     if (SerialUSB.available() > 0) {
       serialCommand = SerialUSB.readStringUntil('\r');
+
     }
     stateMachine();
   }
@@ -702,6 +709,7 @@ bool stringToBool(const std::string& str) {
     } else if (s == "false" || s == "0") {
         return false;
     } 
+    return false;
 }
 
 void reInitialize() {
@@ -730,19 +738,9 @@ void setup() {
   // put your setup code here, to run once:
 
   pinMode(AnalogIN, INPUT);
-  pinMode(AnalogINA, INPUT);
-  pinMode(AnalogINB, INPUT);
-  pinMode(AnalogINC, INPUT);
   
-  pinMode(pinA, INPUT_PULLUP);// Internal pull-up resistor for switch A
-  pinMode(pinB, INPUT_PULLUP);// Internal pull-up resistor for switch B
-  pinMode(pinC, INPUT_PULLUP);// Internal pull-up resistor for switch A
-  // pinMode(pinSW1, INPUT); 
-  // pinMode(pinSW2, INPUT); 
-
-
-  attachInterrupt(digitalPinToInterrupt(pinA), updateEncoderValue, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(pinB), updateEncoderValue, CHANGE);
+  pinMode(pinA, INPUT);// Internal pull-up resistor for switch A
+  pinMode(pinB, INPUT);// Internal pull-up resistor for switch B
   
   SerialUSB.begin(115200);      // baud rate
   startArduinoProg = millis();  // début programme
@@ -761,27 +759,41 @@ void loop() {
       break;
     case 'p':  // Initialisation : transmission des paramètres de la tâche à partir de Python
       {
-      send_message("received parameters");
-      string variables;
-      variables = serialCommand.substring(1).c_str();
-      serialCommand = "";
-      std::vector<std::string> parts = split_string(variables, ';');
-      initTrial = stof(parts[0]);
-      init_thresh = stoi(parts[0]);
-      baselineTrial = stof(parts[1]);
-      duration = stof(parts[2]);
-      hit_window = stof(parts[3]);
-      hit_thresh =stof(parts[4]);
-      adapt_hit_thresh = stringToBool(parts[5]);
-      hit_thresh_min = stof(parts[6]);
-      hit_thresh_max = stof(parts[7]);
-      lever_gain =stof(parts[8]);
-      failure_tolerance =stof(parts[9]);
-      MaxTrialNum =stof(parts[10]);
-      hold_time =stof(parts[11]) * 1000;
-      adapt_hold_time= stringToBool(parts[12]);
-      hold_time_min = stof(parts[13]) * 1000;
-      hold_time_max = stof(parts[14]) * 1000;
+        send_message("received parameters");
+        string variables;
+        variables = serialCommand.substring(1).c_str();
+        serialCommand = "";
+        std::vector<std::string> parts = split_string(variables, ';');
+        initTrial = stof(parts[0]);
+        init_thresh = stoi(parts[0]);
+        baselineTrial = stof(parts[1]);
+        duration = stof(parts[2]);
+        hit_window = stof(parts[3]);
+        hit_thresh =stof(parts[4]);
+        adapt_hit_thresh = stringToBool(parts[5]);
+        hit_thresh_min = stof(parts[6]);
+        hit_thresh_max = stof(parts[7]);
+        lever_gain =stof(parts[8]);
+        failure_tolerance =stof(parts[9]);
+        MaxTrialNum =stof(parts[10]);
+        hold_time =stof(parts[11]) * 1000;
+        adapt_hold_time= stringToBool(parts[12]);
+        hold_time_min = stof(parts[13]) * 1000;
+        hold_time_max = stof(parts[14]) * 1000;
+        input_type = stringToBool(parts[17]);
+
+        if(input_type) {
+          detachInterrupt(digitalPinToInterrupt(pinA));
+          detachInterrupt(digitalPinToInterrupt(pinB));
+          send_message("input_type true");
+        }
+        else {
+          attachInterrupt(digitalPinToInterrupt(pinA), updateEncoderValue, CHANGE);
+          attachInterrupt(digitalPinToInterrupt(pinB), updateEncoderValue, CHANGE);
+          send_message("input_type false");
+        }
+        send_message("adapt_hit" + String(adapt_hit_thresh));
+        
       }
       break;
     case 's':  // Start
