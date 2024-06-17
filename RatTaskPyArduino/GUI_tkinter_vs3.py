@@ -157,8 +157,9 @@ def readArduinoInput():
     # arduino.flushInput()  # vide le buffer en provenance de l'arduino
 
 stateList = []
-
+pieces = 0
 def readArduinoLine():
+    global pieces
     global dataDeque
     global timeDeque
     global num_trials, num_pellets, num_rewards
@@ -181,32 +182,48 @@ def readArduinoLine():
         output = output.removeprefix('trialData')
 
         if ("partialEnd" in output):
-            print(output)
             partial = True
+            pieces += 1
             output = output.removesuffix('partialEnd')  # input en 'string'. Each arduino value is separated by ';'
-            print(output)
-        data = output.split(";nt", 1)
+        # data = output.split(";nt", 1)
+        data = output.split("nt", 1)
         trial_data = data[0].split(";")
-        print(trial_data)
         # dataDeque = deque([0] * buffer_size, maxlen=buffer_size)
         # timeDeque = deque([0] * buffer_size, maxlen=buffer_size) 
         for pair in trial_data:
             if pair:  # Ignore empty strings
-                print(pair, end=' ')
-                time, value = pair.split('/')
-                dataDeque.extend([value])
-                timeDeque.extend([time])
+                # print(pair, end=' ')
+                try:
+                    time, value = pair.split('/')
+                except ValueError as e:
+                    print("pair : " + str(pair))
+                    raise(e)
+                if not (time == '0' and value == '0'):
+                    dataDeque.extend([value])
+                    timeDeque.extend([time])
         print("\n")
 
         
+        zipped = zip(timeDeque, dataDeque)
+
+        for item in zipped:
+            print(item, end = " ")
+        print("x")
+        
+        
+# Iterate over the zipped object
 
         dataArray = np.array(dataDeque).astype(float) 
         timeArray = np.array(timeDeque).astype(float)
 
         if partial:
+            pieces += 1
             print("PARTIAL SPLIT")
             return False, np.zeros(0), np.zeros(0)
         
+        pieces += 1
+        print("pieces" + str(pieces))
+        pieces = 0
         # dataDeque = deque([0], maxlen=buffer_size)
         # timeDeque = deque([0] * buffer_size, maxlen=buffer_size) 
         dataDeque.clear()
@@ -256,7 +273,6 @@ def readArduinoLine():
         return True, dataArray, timeArray
 
     else:
-        print("output")
 
         print("full input not found")
 
@@ -281,6 +297,7 @@ def listStr2listFloat(inList):
 global max_force
 max_force = 0
 def plotData(time_Array, data_Array):
+    print("here")
     length = 0
     for i in range(len(time_Array)):
         if float(time_Array[i]) != 0:
@@ -293,6 +310,7 @@ def plotData(time_Array, data_Array):
             # print(str(time_Array[i]) + " with " + str(data_Array[i]))
     # axeTempRel
     global max_force
+    print("here")
     
     # axeTempRel = (time_Array - time_Array.min()) / 1000
     axeTempRel = (time_Array) / 1000
@@ -313,7 +331,7 @@ def plotData(time_Array, data_Array):
             max_force = 0
         else:
             max_force = float(parameters["hitThresh"].get()) + 10
-
+    print("here")
     colors_normalized = list(np.random.rand(len(data_Array)))
     ax.plot(axeTempRel, data_Array, linewidth=0.5)
     # ax.scatter(axeTempRel, data_Array, c=colors_normalized, cmap='viridis', s=0.1)
@@ -323,21 +341,30 @@ def plotData(time_Array, data_Array):
 
     # ax.axhline(float(iniThreshold.get()), color='r', linestyle='--', label='Threshold 1', linewidth=0.5)
     # ax.axhline(float(hitThresh.get()), color='g', linestyle='--', label='Threshold 2', linewidth=0.5)
+    print("here1")
     if entry_changed():
         ax.plot([-1, float(parameters["hitWindow"].get())], [0, 0], color='black', linestyle='--', linewidth=0.25)
         ax.plot([-1, 0], [float(parameters["iniThreshold"].get()), float(parameters["iniThreshold"].get())], color='g', linestyle='--', linewidth=0.5)
+        print("here2")
         ax.plot([0, float(parameters["hitWindow"].get())], [float(parameters["hitThresh"].get()), float(parameters["hitThresh"].get())], color='r', linestyle='--', linewidth=0.5)
         ax.axvline(x=-1, color='gray', linestyle='--', linewidth=0.5)
         ax.axvline(x=0, color='gray', linestyle='--', linewidth=0.5)
+        print("here3")
         ax.axvline(x=float(parameters["hitWindow"].get()), color='gray', linestyle='--', linewidth=0.5)
-    
+    print("here4")
     ticks = np.arange(np.floor(-1), np.ceil(max_time), .5)
+    print("here5")
     ax.set_xticks(ticks)
     ticks = np.arange(0, max_force + 100, 100)
+    print("here6")
     ax.set_yticks(ticks)
-    ax.set_ylim(-100, max_force + 100)
+    try:
+        ax.set_ylim(-100, max_force + 100)
+    except Exception as e:
+        print(e)
+    print("here7")
     ax.tick_params(axis='both', labelsize=3)
-
+    print("here")#5
     
     if lever_type:
         ax.set_title("Pulling Force", fontsize=7)
@@ -347,7 +374,7 @@ def plotData(time_Array, data_Array):
         ax.set_ylabel('Rotation(deg)',fontsize=6)
     ax.set_xlabel('Time(s)',fontsize=6)
     ax.margins(.15)
-   
+    print("here")
     canvas.draw()
     canvas.flush_events()
 
@@ -388,20 +415,15 @@ def disconnected():
 
 def toggle_start2():
     global session_paused
-    print("toggle")
     if not session_paused and session_running:
-        print("session wasn't paused")
         session_paused = True
         pause()
     else:
         session_paused = False
-        print("session was paused")
-        print("setting thing to pause in toggle start")
         startButton.config(text="PAUSE")
         if not session_running:
             start()
         else:
-            print("going into resume")
             resume()
 
 pause_start = None
@@ -438,7 +460,6 @@ def start():
     session["Initial_hold_time"] = float(parameters["holdTime"].get()) * 1000
 
     session_running = True
-    print("setting thing to pause in start")
     startButton.config(text="PAUSE")
     stopButton.config(state="normal")
     if not testConnection():
@@ -460,7 +481,6 @@ def start():
             updateDisplayValues()
             try:
                 if arduino.inWaiting() > 1:
-                    print("waiting")
                     readArduinoInput()
                 top.update()
             except serial.SerialException:
@@ -471,7 +491,6 @@ def start():
             
     except serial.SerialException as E:
         print(E)
-        print("did not work")
         stop_Button()
         disconnected()
         
