@@ -598,11 +598,6 @@ void updateEncoderValue() {
   previousB = encoderB;
   
   int angle = ((encoderPos / 4)); //%360 abs
-  if (angle % 1 == 0 && angle != previous_angle) {
-    if (!sending) {
-      send_message(String(angle));
-    }
-  }
 
   previous_angle = angle;
 

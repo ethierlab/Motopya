@@ -164,10 +164,20 @@ def readArduinoLine():
     global num_trials, num_pellets, num_rewards
     output = arduino.readline()
     output = str(output, 'utf-8')
-
-    if ("trialData" in output and "fin\r\n" in output):
+    print(output)
+    if ("message" in output and "fin\r\n" in output):
+        output = output.removeprefix("message")
+        print("here")
+        output = output.removesuffix("fin\r\n")
+        stateList.append(output)    
+        print("*\n*")
+        print(stateList[-100:])
+        if ("done" in output):
+            stop_Button()
+        return False, np.zeros(0), np.zeros(0)
+    elif ("trialData" in output and "fin\r\n" in output):
         partial = False
-        output = output.strip(';fin\r\n')  # input en 'string'. Each arduino value is separated by ';'
+        output = output.removesuffix('fin\r\n')  # input en 'string'. Each arduino value is separated by ';'
         output = output.removeprefix('trialData')
 
         if ("partialEnd" in output):
@@ -244,18 +254,10 @@ def readArduinoLine():
 
 
         return True, dataArray, timeArray
-    elif ("message" in output):
-        output = output.removeprefix("message")
-        print("here")
-        output = output.removesuffix(";fin\r\n")
-        stateList.append(output)    
-        print("*\n*")
-        print(stateList[-100:])
-        if ("done" in output):
-            stop_Button()
-        return False, np.zeros(0), np.zeros(0)
+
     else:
-        print(output)
+        print("output")
+
         print("full input not found")
 
         return False, np.zeros(0), np.zeros(0)
