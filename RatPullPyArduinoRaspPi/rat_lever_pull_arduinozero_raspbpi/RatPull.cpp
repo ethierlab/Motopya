@@ -18,8 +18,6 @@
 #include <cstdio> //for popen() and pclose()
 #include <cstring> // for fgets()
 
-#define INPUT_PIN 17   // Example GPIO pin for digital input
-#define OUTPUT_PIN 18  // Example GPIO pin for digital output
 #define SERIAL_PORT "/dev/ttyS0"  // Serial port for communication, change if necessary
 
 
@@ -30,7 +28,16 @@ using namespace std;
 
 //Settings
 int AnalogIN = 0;
+const int pinA = 2;  // A output
+const int pinB = 3;  // B output
 string serialCommand = "wait";
+
+int initial;
+int previousA = -1;
+int previousB = -1;
+int previous_angle;
+int sum = 0;
+int encoderPos = 0;
 
 int serialFd = 0;
 
@@ -52,6 +59,10 @@ unsigned long LastTime;  // le dernier temps du buffer data
 
 
 // - input Parameters
+
+bool input_type = true;
+
+
 int num_pellets = 0;
 int num_rewards = 0;
 int num_trials = 0;
@@ -152,16 +163,6 @@ int getTimerDuration(int start) {
   return millis() - start;
 }
 
-//unsigned long millis() {
-    //using namespace std::chrono;
-    //// Get the current time point
-    //static auto start = steady_clock::now();
-    //auto now = steady_clock::now();
-    //// Calculate the duration in milliseconds
-    //auto duration = duration_cast<milliseconds>(now - start);
-    //return duration.count();
-//}
-
 int getMean(std::vector<int> numbers) {
   int sum = std::accumulate(numbers.begin(), numbers.end(), 0.0);
 
@@ -217,8 +218,11 @@ void stateMachine() {
   //TODO
   // drawnow limitrate;  // process callbacks, update figures at 20Hz max
   //% read module force
-  moduleValue_before = moduleValue_now;    // store previous value
-  moduleValue_now = analogRead(AnalogIN) * lever_gain;  // update current value
+  if (input_type) {
+    moduleValue_before = moduleValue_now;    // store previous value
+    moduleValue_now = analogRead(AnalogIN) * lever_gain;  // update current value
+  }
+
   // fill force buffertrial_start_time
   // limit temp buffer size to 'buffer_dur' (last 1s of data)+
   // tmp_value_buffer = [tmp_value_buffer(session_t - tmp_value_buffer(:, 1) <= app.buffer_dur, :); session_t moduleValue_now];
@@ -257,6 +261,13 @@ void stateMachine() {
 
 
   // STATE MACHINE
+
+  if (trial_started) {
+    recordCurrentValue();
+
+  }
+
+
   switch (CURRENT_STATE) {
     // STATE_IDLE
     case STATE_IDLE:
@@ -311,6 +322,7 @@ void stateMachine() {
       // trial_value_buffer.clear();
       send_message(to_string(tmp_value_buffer.size()));
       if (tmp_value_buffer.size() > 0) {
+        trial_value_buffer.clear();
         send_message("inside if" + to_string(tmp_value_buffer.size()));
           std::transform(tmp_value_buffer.begin(), tmp_value_buffer.end() - 1, std::back_inserter(trial_value_buffer), [](const std::vector<int>& sublist) { 
           return std::vector<int>{sublist[0] - trial_start_time, sublist[1]};
@@ -494,27 +506,47 @@ void stateMachine() {
       serialCommand = "e";
       break;
   }
-  if (trial_started) {
-    recordCurrentValue();
 
-  }
   CURRENT_STATE = NEXT_STATE;
 }
 
 
+void enableInterrupt(int pin) {
+    wiringPiISR(pin, INT_EDGE_BOTH, &updateEncoderValue);
+    std::cout << "Interrupts enabled on pin " << pin << std::endl;
+}
+
+void disableInterrupt(int pin) {
+    wiringPiISR(pin, INT_EDGE_BOTH, NULL); // Detach ISR by attaching NULL
+    std::cout << "Interrupts disabled on pin " << pin << std::endl;
+}
+
+void interrupts() {
+  enableInterrupt(pinA);
+  enableInterrupt(pinB);
+}
+
+void noInterrupts() {
+  disableInterrupt(pinA);
+  disableInterrupt(pinB);
+}
+
+bool sending = false;
 void sendTrialData2Python(bool done) {
-  // SerialUSB.flush();
-  // Data
-  send_message(to_string(trial_value_buffer[1][0]) + " " + to_string(trial_value_buffer[1][1]) + " " + to_string(trial_value_buffer.size()));
+  sending = true;
+  unsigned long timeStamp;
+  unsigned long StartTime;
   string dataDelimiter = "trialData";
   writeSerial(serialFd, dataDelimiter);
   for (size_t i = 0; i < trial_value_buffer.size(); i++) {
-
+    noInterrupts();
     writeSerial(serialFd, to_string(trial_value_buffer[i][0]));
     writeSerial(serialFd, "/");
     writeSerial(serialFd, to_string(trial_value_buffer[i][1]));
     writeSerial(serialFd, ";");
+    interrupts();
   }
+  noInterrupts();
   writeSerial(serialFd, "nt");
   writeSerial(serialFd, to_string(num_trials));
   writeSerial(serialFd, ";");
@@ -544,7 +576,12 @@ void sendTrialData2Python(bool done) {
   }
   writeSerial(serialFd, "fin");
   writeSerial(serialFd, "\r\n");
-  //serialFlush(serialFd);
+
+  
+  serialFlush(serialFd);
+  sending = false;
+  interrupts();
+
   // code de fin d'envoi de données
 }
 
@@ -564,6 +601,46 @@ void send_message(const string& message) {
   }
   h += 1;
   
+}
+
+void updateEncoderValue() {
+  int encoderA = digitalRead(pinA);
+  int encoderB = digitalRead(pinB);
+
+  // send_message(String(encoderA) +  " " +  String(encoderB));
+
+  if (encoderA != previousA && previousA != -1) {
+    if (encoderB != encoderA) {
+      // encoderPos ++;
+      encoderPos ++;
+    }
+    else {
+      // encoderPos --;
+      encoderPos --;
+    }
+  }
+  if (encoderB != previousB && previousB != -1) {
+    if (encoderB == encoderA) {
+      // encoderPos ++;
+      encoderPos ++;
+    }
+    else {
+      // encoderPos --;
+      if (encoderPos > 0) {
+        encoderPos --;
+      }
+     
+    }
+  }
+
+  previousA = encoderA;
+  previousB = encoderB;
+  
+  int angle = ((encoderPos / 4)); //%360 abs
+
+  previous_angle = angle;
+
+  moduleValue_now = angle;
 }
 
 void feed() {
@@ -592,6 +669,10 @@ void experimentOn() {
       }
       pause_session = !pause_session;
       serialCommand = "s";
+    }
+    else if (serialCommand[0] == 'a'){
+      send_message("received stop");
+      stop_session = true;
     }
     // delay(5);
     //if (SerialUSB.available() > 0) {
@@ -648,29 +729,6 @@ void reInitialize() {
 
 
 // INITIALISATION-------------------------------
-//int initSerial(const char* port, int baud) {
-    //int fd = open(port, O_RDWR | O_NOCTTY | O_NDELAY);
-    //if (fd == -1) {
-        //std::cerr << "Failed to open serial port" << std::endl;
-        //return -1;
-    //}
-
-    //termios options;
-    //tcgetattr(fd, &options);
-    //cfsetispeed(&options, baud);
-    //cfsetospeed(&options, baud);
-    //options.c_cflag |= (CLOCAL | CREAD);
-    //options.c_cflag &= ~PARENB;
-    //options.c_cflag &= ~CSTOPB;
-    //options.c_cflag &= ~CSIZE;
-    //options.c_cflag |= CS8;
-    //options.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);
-    //options.c_iflag &= ~(IXON | IXOFF | IXANY);
-    //options.c_oflag &= ~OPOST;
-    //tcsetattr(fd, TCSANOW, &options);
-
-    //return fd;
-//}
 
 // Function to read from serial
 std::string readSerial(int fd) {
@@ -687,32 +745,16 @@ std::string readSerial(int fd) {
 
 // Function to write to serial
 void writeSerial(int fd, const std::string &data) {
-    //int n = write(fd, data.c_str(), data.length());
     serialPuts(fd, data.c_str());
-    
-    //if (n < 0) {
-        //std::cerr << "Failed to write to serial port" << std::endl;
-    //}
 }
 bool empty_stated = false;
 
 int main() {
 	// Initialize wiringPi library and serial port
-  
-  
-  FILE* pipe = popen("lsusb", "r");
-  if(!pipe) {
-    
-    std::cerr << "Error: Failed to open pipe" << std::endl;
-    return 1;
-  }
-  
-  char buffer[128];
-  while(fgets(buffer, sizeof(buffer), pipe) != nullptr){
-    std::cout << "USB Device: " << buffer;
-  }
-  
-  pclose(pipe);
+  //SETUP
+
+  pinMode(pinA, INPUT);// Internal pull-up resistor for switch A
+  pinMode(pinB, INPUT);// Internal pull-up resistor for switch B
   
   
   std::cout << "Running main " << serialCommand << std::endl;
@@ -720,7 +762,7 @@ int main() {
         std::cerr << "WiringPi setup failed" << std::endl;
         return 1;
   }
-  serialFd = serialOpen("/dev/ttyAMA0", 9600);
+  serialFd = serialOpen("/dev/ttyAMA0", 115200); //baud rate
   if (serialFd == -1) {
         std::cout << "Failed to open serial port: " << std::endl;
         return 1;
@@ -732,19 +774,15 @@ int main() {
   pinMode(AnalogIN, INPUT);
    //pinMode(OUTPUT_PIN, OUTPUT);
    
-   //const char* message = "Hello, Serial\n";
-   //serialPuts(serialFd, message);
-   //usleep(500000);
-   //usleep(500000);
 	
-	
-	// put your setup code here, to run once:
   //pinMode(AnalogIN, INPUT);
-  //SerialUSB.begin(115200);      // baud rate
-  //startArduinoProg = millis();  // début programme
-  //loop_timer = millis();
-  //experiment_start = millis();
+
+  startArduinoProg = millis();  // début programme
+  loop_timer = millis();
+  experiment_start = millis();
   
+
+  //LOOP
   while(true) {
     //std::string serialCommand = readSerial(serialFd);
     serialCommand = "";
@@ -759,67 +797,43 @@ int main() {
             
             std::cout << "Received: " << serialCommand << std::endl;
             empty_stated = true;
-            //// Example: Toggle LED based on input
-            //if (input == "on") {
-                //writeSerial(serialFd, "LED is ON\n");
-            //} else if (input == "off") {
-                //digitalWrite(LED_PIN, LOW);
-                //writeSerial(serialFd, "LED is OFF\n");
-            //} else {
-                //writeSerial(serialFd, "Unknown command\n");
-            //}
-        }
-  else {
-    //if (!empty_stated) {
-    //std::cout << "Nothing received yet. " << serialCommand << std::endl;
-    empty_stated = true;
-    //}
-    //const char* message = "Hello, Serial\r\n";
-    //serialPuts(serialFd, message);
-    //usleep(500000);
-    //std::cout << "Nothing received yet.... " << serialCommand << std::endl;
-    //usleep(500000);
-  }
-	  //if (SerialUSB.available() > 0) {
-		  //serialCommand = SerialUSB.readStringUntil('\r');
-	  //}
-
-	  switch (serialCommand[0]) {  // Première lettre de la commande
-		  case 'w':  // boucle defaut standby
-		    break;
-		  case 'p':  // Initialisation : transmission des paramètres de la tâche à partir de Python
-		    {
-        send_message("received parameters");
-        string variables;
-        variables = serialCommand.substr(1).c_str();
-        serialCommand = "";
-        std::vector<std::string> parts = split_string(variables, ';');
-        initTrial = stof(parts[0]);
-        init_thresh = stoi(parts[0]);
-        baselineTrial = stof(parts[1]);
-        duration = stof(parts[2]);
-        hit_window = stof(parts[3]);
-        hit_thresh =stof(parts[4]);
-        adapt_hit_thresh = stringToBool(parts[5]);
-        hit_thresh_min = stof(parts[6]);
-        hit_thresh_max = stof(parts[7]);
-        lever_gain =stof(parts[8]);
-        failure_tolerance =stof(parts[9]);
-        MaxTrialNum =stof(parts[10]);
-        hold_time =stof(parts[11]) * 1000;
-        adapt_hold_time= stringToBool(parts[12]);
-        hold_time_min = stof(parts[13]) * 1000;
-        hold_time_max = stof(parts[14]) * 1000;
-      }
-       break;
-      case 's':  // Start
-        send_message("received start");
-        experimentOn();
-        break;
-      case 'a':
-        send_message("received stop");
-        stop_session = true;
-        break;
+            switch (serialCommand[0]) {  // Première lettre de la commande
+              case 'w':  // boucle defaut standby
+                break;
+              case 'p':  // Initialisation : transmission des paramètres de la tâche à partir de Python
+                {
+                send_message("received parameters");
+                string variables;
+                variables = serialCommand.substr(1).c_str();
+                serialCommand = "";
+                std::vector<std::string> parts = split_string(variables, ';');
+                initTrial = stof(parts[0]);
+                init_thresh = stoi(parts[0]);
+                baselineTrial = stof(parts[1]);
+                duration = stof(parts[2]);
+                hit_window = stof(parts[3]);
+                hit_thresh =stof(parts[4]);
+                adapt_hit_thresh = stringToBool(parts[5]);
+                hit_thresh_min = stof(parts[6]);
+                hit_thresh_max = stof(parts[7]);
+                lever_gain =stof(parts[8]);
+                failure_tolerance =stof(parts[9]);
+                MaxTrialNum =stof(parts[10]);
+                hold_time =stof(parts[11]) * 1000;
+                adapt_hold_time= stringToBool(parts[12]);
+                hold_time_min = stof(parts[13]) * 1000;
+                hold_time_max = stof(parts[14]) * 1000;
+              }
+              break;
+              case 's':  // Start
+                send_message("received start");
+                experimentOn();
+                break;
+              case 'a':
+                send_message("received stop");
+                stop_session = true;
+                break;
+            }
         }
 	}
 	  

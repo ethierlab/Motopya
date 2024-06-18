@@ -13,14 +13,8 @@ using namespace std;
 
 //Settings
 int AnalogIN = A0;
-int AnalogINA = A1;
-int AnalogINB = A2;
-int AnalogINC = A3;
 const int pinA = 2;  // A output
 const int pinB = 3;  // B output
-const int pinC = 7;
-const int pinSW1 = 4; // Switch 1
-const int pinSW2 = 5; // Switch 2
 String serialCommand = "wait";
 
 
@@ -161,8 +155,6 @@ void recordCurrentValue() {
     if (trial_value_buffer.size() >= lenBuffer) {
       sendTrialData2Python(false);
       trial_value_buffer.clear();
-      send_message("trial_time");
-      send_message(String(trial_time));
       // trial_value_buffer.erase(trial_value_buffer.begin());
     }
     
@@ -196,8 +188,8 @@ void stateMachine() {
   //TODO
   // drawnow limitrate;  // process callbacks, update figures at 20Hz max
   //% read module force
-  moduleValue_before = moduleValue_now;    // store previous value
   if (input_type) {
+    moduleValue_before = moduleValue_now;    // store previous value
     moduleValue_now = analogRead(AnalogIN) * lever_gain;  // update current value
   }
 
@@ -486,13 +478,9 @@ void stateMachine() {
 
 bool sending = false;
 void sendTrialData2Python(bool done) {
-  // noInterrupts();
   sending = true;
   unsigned long timeStamp;
   unsigned long StartTime;
-  // SerialUSB.flush();
-  // Data
-  // send_message(String(trial_value_buffer[1][0]) + " " + String(trial_value_buffer[1][1]) + " " + trial_value_buffer.size());
   String dataDelimiter = "trialData";
   SerialUSB.print(dataDelimiter);
   for (int i = 0; i < trial_value_buffer.size(); i++) {
@@ -604,48 +592,6 @@ void updateEncoderValue() {
   moduleValue_now = angle;
 }
 
-
-int getEncoderValue() {
-  int encoderA = digitalRead(pinA);
-  int encoderB = digitalRead(pinB);
-  send_message(String(encoderA) + String(encoderB));
-
-  // send(String(encoderA) +  " " +  String(encoderB));
-
-  if (encoderA != previousA && previousA != -1) {
-    if (encoderB != encoderA) {
-      // encoderPos ++;
-      encoderPos ++;
-    }
-    else {
-      // encoderPos --;
-      encoderPos --;
-    }
-  }
-  if (encoderB != previousB && previousB != -1) {
-    if (encoderB == encoderA) {
-      // encoderPos ++;
-      encoderPos ++;
-    }
-    else {
-      // encoderPos --;
-      encoderPos --;
-    }
-  }
-
-  
-  previousA = encoderA;
-  previousB = encoderB;
-  
-  int angle = ((encoderPos * 0.4954)); //%360 abs
-  if (angle % 1 == 0 && angle != previous_angle) {
-    send_message(String(angle));
-  }
-
-  previous_angle = angle;
-
-  return angle;
-}
 
 void experimentOn() {
   int posIndice;
