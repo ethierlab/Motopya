@@ -72,21 +72,24 @@ def connectArduino():
     clear_stats()
     ports = serial.tools.list_ports.comports()
     port_found = None
-    # for port in ports:
-        # print("Port:", port.device)
-        # print("Description:", port.description)
-        # print("Hardware ID:", port.hwid)
-        # print("Manufacturer:", port.manufacturer)
-        # print("Product:", port.product)
-        # print("Serial Number:", port.serial_number)
-        # print("===================================")
-        
-        # if "arduino" in port.description.lower() or "arduino" in port.manufacturer.lower():
-            # print(port.description.lower())
-            # description = port.description
-            # print(description)
-            # port_found = port.device
-    port_found = '/dev/serial0'
+    for port in ports:
+        print("Port:", port.device)
+        print("Description:", port.description)
+        print("Hardware ID:", port.hwid)
+        print("Manufacturer:", port.manufacturer)
+        print("Product:", port.product)
+        print("Serial Number:", port.serial_number)
+        print("===================================")
+        if (not port.description):
+            port.description = ""
+        if (not port.manufacturer):
+            port.manufacturer = ""
+        if "tty" in port.description.lower() or "tty" in port.manufacturer.lower() or "tty" in port.device.lower():
+            print(port.description.lower())
+            description = port.description
+            print(description)
+            port_found = port.device
+    port_found = "/dev/ttyAMA0"
     description = "the raspberry pi"
     if port_found == None:
         print("Device not found")
@@ -100,7 +103,7 @@ def connectArduino():
     
     # Serial communication
 
-    arduino = serial.Serial(port_found, 115211)
+    arduino = serial.Serial(port_found, 115200)
     t.sleep(1)
     arduino.flushInput()  # vide le buffer en provenance de l'arduino
     connected = True
