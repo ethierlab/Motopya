@@ -192,22 +192,22 @@ def readArduinoLine():
         # timeDeque = deque([0] * buffer_size, maxlen=buffer_size) 
         for pair in trial_data:
             if pair:  # Ignore empty strings
-                # print(pair, end=' ')
+                print(pair, end=' ')
                 try:
                     time, value = pair.split('/')
                 except ValueError as e:
                     print("pair : " + str(pair))
                     raise(e)
-                if not (time == '0' and value == '0'):
+                if not (time == '0' and value == '0') and abs(float(time)) < 10000 and float(value) < 2000:
                     dataDeque.extend([value])
                     timeDeque.extend([time])
         print("\n")
 
         
-        zipped = zip(timeDeque, dataDeque)
-
-        for item in zipped:
-            print(item, end = " ")
+        zipped = list(zip(timeDeque, dataDeque))
+        for item in range(len(zipped)):
+            if (float(zipped[item][0]) > 10000):
+                print(str(item) + str(zipped[item]), end = " ")
         print("x")
         
         
@@ -297,7 +297,6 @@ def listStr2listFloat(inList):
 global max_force
 max_force = 0
 def plotData(time_Array, data_Array):
-    print("here")
     length = 0
     for i in range(len(time_Array)):
         if float(time_Array[i]) != 0:
@@ -310,7 +309,6 @@ def plotData(time_Array, data_Array):
             # print(str(time_Array[i]) + " with " + str(data_Array[i]))
     # axeTempRel
     global max_force
-    print("here")
     
     # axeTempRel = (time_Array - time_Array.min()) / 1000
     axeTempRel = (time_Array) / 1000
@@ -331,7 +329,6 @@ def plotData(time_Array, data_Array):
             max_force = 0
         else:
             max_force = float(parameters["hitThresh"].get()) + 10
-    print("here")
     colors_normalized = list(np.random.rand(len(data_Array)))
     ax.plot(axeTempRel, data_Array, linewidth=0.5)
     # ax.scatter(axeTempRel, data_Array, c=colors_normalized, cmap='viridis', s=0.1)
@@ -341,30 +338,19 @@ def plotData(time_Array, data_Array):
 
     # ax.axhline(float(iniThreshold.get()), color='r', linestyle='--', label='Threshold 1', linewidth=0.5)
     # ax.axhline(float(hitThresh.get()), color='g', linestyle='--', label='Threshold 2', linewidth=0.5)
-    print("here1")
     if entry_changed():
         ax.plot([-1, float(parameters["hitWindow"].get())], [0, 0], color='black', linestyle='--', linewidth=0.25)
         ax.plot([-1, 0], [float(parameters["iniThreshold"].get()), float(parameters["iniThreshold"].get())], color='g', linestyle='--', linewidth=0.5)
-        print("here2")
         ax.plot([0, float(parameters["hitWindow"].get())], [float(parameters["hitThresh"].get()), float(parameters["hitThresh"].get())], color='r', linestyle='--', linewidth=0.5)
         ax.axvline(x=-1, color='gray', linestyle='--', linewidth=0.5)
         ax.axvline(x=0, color='gray', linestyle='--', linewidth=0.5)
-        print("here3")
         ax.axvline(x=float(parameters["hitWindow"].get()), color='gray', linestyle='--', linewidth=0.5)
-    print("here4")
     ticks = np.arange(np.floor(-1), np.ceil(max_time), .5)
-    print("here5")
     ax.set_xticks(ticks)
     ticks = np.arange(0, max_force + 100, 100)
-    print("here6")
     ax.set_yticks(ticks)
-    try:
-        ax.set_ylim(-100, max_force + 100)
-    except Exception as e:
-        print(e)
-    print("here7")
+    ax.set_ylim(-100, max_force + 100)
     ax.tick_params(axis='both', labelsize=3)
-    print("here")#5
     
     if lever_type:
         ax.set_title("Pulling Force", fontsize=7)
@@ -374,7 +360,6 @@ def plotData(time_Array, data_Array):
         ax.set_ylabel('Rotation(deg)',fontsize=6)
     ax.set_xlabel('Time(s)',fontsize=6)
     ax.margins(.15)
-    print("here")
     canvas.draw()
     canvas.flush_events()
 
