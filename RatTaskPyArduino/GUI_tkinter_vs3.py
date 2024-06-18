@@ -20,7 +20,7 @@ import csv
 import os
 
 
-
+lever_type = True
 
 arduino = None
 connected = False
@@ -44,17 +44,20 @@ session = {}
 
 
 global buffer_size
-buffer_size = 500
+# buffer_size = 10000
 
-dataDeque = deque([0] * buffer_size, maxlen=buffer_size)
-timeDeque = deque([0] * buffer_size, maxlen=buffer_size) 
+# dataDeque = deque([0] * buffer_size, maxlen=buffer_size)
+# timeDeque = deque([0] * buffer_size, maxlen=buffer_size) 
+
+dataDeque = deque()
+timeDeque = deque() 
 
 # StorageVariable
-global sensorValueTrial
-sensorValueTrial = np.empty((1, buffer_size),
-                            dtype="float")  # accumulation ligne par ligne des valeurs du senseur à chaque essai
-global sensorTimeStamp
-sensorTimeStamp = np.empty((1, buffer_size), dtype="float")  # les temps pour chacun des essais
+# global sensorValueTrial
+# sensorValueTrial = np.empty((1, buffer_size),
+#                             dtype="float")  # accumulation ligne par ligne des valeurs du senseur à chaque essai
+# global sensorTimeStamp
+# sensorTimeStamp = np.empty((1, buffer_size), dtype="float")  # les temps pour chacun des essais
 
 
 def testConnection():
@@ -81,7 +84,7 @@ def connectArduino():
         print("Serial Number:", port.serial_number)
         print("===================================")
         
-        if "arduino" in port.description.lower():
+        if "arduino" in port.description.lower() or "arduino" in port.manufacturer.lower():
             print(port.description.lower())
             description = port.description
             print(description)
@@ -97,7 +100,8 @@ def connectArduino():
 
     
     # Serial communication
-
+    if arduino:
+        arduino.close()
     arduino = serial.Serial(port_found, 115211)
     t.sleep(1)
     arduino.flushInput()  # vide le buffer en provenance de l'arduino
@@ -127,8 +131,8 @@ def sendArduino(text):
 
 def readArduinoInput():
     # Arduino envoie deux lignes une première de valeurs du senseur et une deuxième des timestamps
-    global sensorValueTrial
-    global sensorTimeStamp
+    # global sensorValueTrial
+    # global sensorTimeStamp
     global dataDeque, timeDeque
 
     received, dataArray, timeArray = readArduinoLine()
@@ -137,59 +141,93 @@ def readArduinoInput():
     else:
         print("received")
 
-    if (len(dataArray) < buffer_size):
-        dataArray = np.pad(dataArray, (0,  (buffer_size - len(dataArray))), mode="constant")
-    elif (len(dataArray) > buffer_size):
-        tempData = np.array(dataArray[len(dataArray) - buffer_size:])
-        dataArray = np.reshape(tempData, (1, -1))
+    # if (len(dataArray) < buffer_size):
+    #     dataArray = np.pad(dataArray, (0,  (buffer_size - len(dataArray))), mode="constant")
+    # elif (len(dataArray) > buffer_size):
+    #     tempData = np.array(dataArray[len(dataArray) - buffer_size:])
+    #     dataArray = np.reshape(tempData, (1, -1))
 
     # # Deuxième ligne
         
 
-    # compilation des essais
-    sensorValueTrial = np.vstack((sensorValueTrial, dataArray))
-    sensorTimeStamp = np.vstack((sensorTimeStamp, timeArray))  # les temps pour chacun des essais
+    # # compilation des essais
+    # sensorValueTrial = np.vstack((sensorValueTrial, dataArray))
+    # sensorTimeStamp = np.vstack((sensorTimeStamp, timeArray))  # les temps pour chacun des essais
     plotData(timeArray, dataArray)
     # arduino.flushInput()  # vide le buffer en provenance de l'arduino
 
 stateList = []
-
+pieces = 0
 def readArduinoLine():
+    global pieces
     global dataDeque
     global timeDeque
     global num_trials, num_pellets, num_rewards
     output = arduino.readline()
     output = str(output, 'utf-8')
-
-    if ("trialData" in output and "fin\r\n" in output):
+    print(output)
+    if ("message" in output and "fin\r\n" in output):
+        output = output.removeprefix("message")
+        print("here")
+        output = output.removesuffix("fin\r\n")
+        stateList.append(output)    
+        print("*\n*")
+        print(stateList[-100:])
+        if ("done" in output):
+            stop_Button()
+        return False, np.zeros(0), np.zeros(0)
+    elif ("trialData" in output and "fin\r\n" in output):
         partial = False
-        output = output.strip(';fin\r\n')  # input en 'string'. Each arduino value is separated by ';'
+        output = output.removesuffix('fin\r\n')  # input en 'string'. Each arduino value is separated by ';'
         output = output.removeprefix('trialData')
 
         if ("partialEnd" in output):
-            print(output)
             partial = True
+            pieces += 1
             output = output.removesuffix('partialEnd')  # input en 'string'. Each arduino value is separated by ';'
-            print(output)
-        data = output.split(";nt", 1)
+        # data = output.split(";nt", 1)
+        data = output.split("nt", 1)
         trial_data = data[0].split(";")
         # dataDeque = deque([0] * buffer_size, maxlen=buffer_size)
         # timeDeque = deque([0] * buffer_size, maxlen=buffer_size) 
         for pair in trial_data:
             if pair:  # Ignore empty strings
-                time, value = pair.split('/')
-                dataDeque.extend([value])
-                timeDeque.extend([time])
+                print(pair, end=' ')
+                try:
+                    time, value = pair.split('/')
+                except ValueError as e:
+                    print("pair : " + str(pair))
+                    raise(e)
+                if not (time == '0' and value == '0') and abs(float(time)) < 10000 and float(value) < 2000:
+                    dataDeque.extend([value])
+                    timeDeque.extend([time])
+        print("\n")
+
+        
+        zipped = list(zip(timeDeque, dataDeque))
+        for item in range(len(zipped)):
+            if (float(zipped[item][0]) > 10000):
+                print(str(item) + str(zipped[item]), end = " ")
+        print("x")
+        
+        
+# Iterate over the zipped object
 
         dataArray = np.array(dataDeque).astype(float) 
         timeArray = np.array(timeDeque).astype(float)
 
         if partial:
+            pieces += 1
             print("PARTIAL SPLIT")
-            return False, np.zeros(buffer_size), np.zeros(buffer_size)
+            return False, np.zeros(0), np.zeros(0)
         
-        dataDeque = deque([0] * buffer_size, maxlen=buffer_size)
-        timeDeque = deque([0] * buffer_size, maxlen=buffer_size) 
+        pieces += 1
+        print("pieces" + str(pieces))
+        pieces = 0
+        # dataDeque = deque([0], maxlen=buffer_size)
+        # timeDeque = deque([0] * buffer_size, maxlen=buffer_size) 
+        dataDeque.clear()
+        timeDeque.clear()
 
     
     
@@ -233,20 +271,12 @@ def readArduinoLine():
 
 
         return True, dataArray, timeArray
-    elif ("message" in output):
-        output = output.removeprefix("message")
-        output = output.removesuffix(";fin\r\n")
-        stateList.append(output)
-        print("*\n*")
-        print(stateList)
-        if ("done" in output):
-            stop_Button()
-        return False, np.zeros(buffer_size), np.zeros(buffer_size)
+
     else:
-        print(output)
+
         print("full input not found")
 
-        return False, np.zeros(buffer_size), np.zeros(buffer_size)
+        return False, np.zeros(0), np.zeros(0)
     
 
 
@@ -282,23 +312,23 @@ def plotData(time_Array, data_Array):
     
     # axeTempRel = (time_Array - time_Array.min()) / 1000
     axeTempRel = (time_Array) / 1000
-    min_time = axeTempRel.min()
-    max_time = axeTempRel.max()
-    if not max_time:
+    
+    if len(axeTempRel) == 0:
         max_time = 3
+    else:
+        max_time = axeTempRel.max()
 
     ax.clear()
-    ax.set_title("Pulling Force", fontsize=7)
+    
     canvas.draw()
     canvas.flush_events()
-
-    max_force = data_Array.max() if data_Array.max() >= max_force else max_force
+    if len(data_Array) > 0:
+        max_force = data_Array.max() if data_Array.max() >= max_force else max_force
     if not max_force:
         if (parameters["hitThresh"].get() == ""):
             max_force = 0
         else:
             max_force = float(parameters["hitThresh"].get()) + 10
-
     colors_normalized = list(np.random.rand(len(data_Array)))
     ax.plot(axeTempRel, data_Array, linewidth=0.5)
     # ax.scatter(axeTempRel, data_Array, c=colors_normalized, cmap='viridis', s=0.1)
@@ -309,24 +339,27 @@ def plotData(time_Array, data_Array):
     # ax.axhline(float(iniThreshold.get()), color='r', linestyle='--', label='Threshold 1', linewidth=0.5)
     # ax.axhline(float(hitThresh.get()), color='g', linestyle='--', label='Threshold 2', linewidth=0.5)
     if entry_changed():
+        ax.plot([-1, float(parameters["hitWindow"].get())], [0, 0], color='black', linestyle='--', linewidth=0.25)
         ax.plot([-1, 0], [float(parameters["iniThreshold"].get()), float(parameters["iniThreshold"].get())], color='g', linestyle='--', linewidth=0.5)
         ax.plot([0, float(parameters["hitWindow"].get())], [float(parameters["hitThresh"].get()), float(parameters["hitThresh"].get())], color='r', linestyle='--', linewidth=0.5)
         ax.axvline(x=-1, color='gray', linestyle='--', linewidth=0.5)
         ax.axvline(x=0, color='gray', linestyle='--', linewidth=0.5)
         ax.axvline(x=float(parameters["hitWindow"].get()), color='gray', linestyle='--', linewidth=0.5)
-    
     ticks = np.arange(np.floor(-1), np.ceil(max_time), .5)
     ax.set_xticks(ticks)
     ticks = np.arange(0, max_force + 100, 100)
     ax.set_yticks(ticks)
     ax.set_ylim(-100, max_force + 100)
     ax.tick_params(axis='both', labelsize=3)
-
+    
+    if lever_type:
+        ax.set_title("Pulling Force", fontsize=7)
+        ax.set_ylabel('Force(g)',fontsize=6)
+    else:
+        ax.set_title("Knob Rotation", fontsize=7)
+        ax.set_ylabel('Rotation(deg)',fontsize=6)
     ax.set_xlabel('Time(s)',fontsize=6)
-
-    ax.set_ylabel('Force(g)',fontsize=6)
     ax.margins(.15)
-   
     canvas.draw()
     canvas.flush_events()
 
@@ -367,20 +400,15 @@ def disconnected():
 
 def toggle_start2():
     global session_paused
-    print("toggle")
     if not session_paused and session_running:
-        print("session wasn't paused")
         session_paused = True
         pause()
     else:
         session_paused = False
-        print("session was paused")
-        print("setting thing to pause in toggle start")
         startButton.config(text="PAUSE")
         if not session_running:
             start()
         else:
-            print("going into resume")
             resume()
 
 pause_start = None
@@ -409,13 +437,14 @@ def start():
     # Déclenche la session comportement
     global session_running
     global session
+    global max_force
+    max_force = 0
     current_datetime = datetime.now()
     session["Start_time"] = current_datetime.strftime("%d-%B-%Y %H:%M:%S")
     session["Initial_hit_thresh"] = parameters["hitThresh"].get()
     session["Initial_hold_time"] = float(parameters["holdTime"].get()) * 1000
 
     session_running = True
-    print("setting thing to pause in start")
     startButton.config(text="PAUSE")
     stopButton.config(state="normal")
     if not testConnection():
@@ -447,7 +476,6 @@ def start():
             
     except serial.SerialException as E:
         print(E)
-        print("did not work")
         stop_Button()
         disconnected()
         
@@ -465,6 +493,7 @@ def stop_Button():
     startButton.config(text="START")
     stopButton.config(state="disabled")
     try:
+        sendArduino('a')
         finish_up(False)
         stateList.clear()
     except serial.SerialException:
@@ -537,6 +566,9 @@ def display(text):
 
 
 def save_results(crashed):
+    file_input_type = "_RatPull"
+    if not lever_type:
+        file_input_type = "_RatKnob"
     if crashed:
         response = messagebox.askyesno("Sorry about that...", "RatPull lever_pull_behavior Crashed!\nSave results?")
     else:
@@ -557,8 +589,8 @@ def save_results(crashed):
             
         
         if dir_exists:
-            ttfname = parameters["ratID"].get() + '_RatPull_trial_table_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.csv'
-            pfname = parameters["ratID"].get() + '_RatPull_params_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.csv'
+            ttfname = parameters["ratID"].get() + file_input_type + '_trial_table_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.csv'
+            pfname = parameters["ratID"].get() + file_input_type + '_params_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.csv'
             gfname = parameters["ratID"].get() + '_global_stats.csv'
             save_trial_table(os.path.join(rat_dir, ttfname))
             # save_file(os.join(rat_dir, ttfname), trial_table)
@@ -570,11 +602,11 @@ def save_results(crashed):
             display('Behavior stats and parameters NOT saved')
     
 
-def save_session():
-    global sensorValueTrial
-    global sensorTimeStamp
-    dir_target = parameters["savefolder"].get()
-    np.savetxt(dir_target, sensorValueTrial, delimiter=",")
+# def save_session():
+#     global sensorValueTrial
+#     global sensorTimeStamp
+#     dir_target = parameters["savefolder"].get()
+#     np.savetxt(dir_target, sensorValueTrial, delimiter=",")
 
 def update_global_stats(filename):
     global session
@@ -745,9 +777,11 @@ def send_parameters():
     message = "p"
     for value in parameters.values():
         message += str(value.get()) + ";"
+    message += str(lever_type)
+    print(message)
     sendArduino(message)
     # sendArduino("p" + init_thresh + ";" + init_baseline + ";" + min_duration + ";" + hit_window + ";" + hit_thresh)
-    plotData(np.array(timeDeque).astype(float), np.array(dataDeque).astype(float))
+    reload_plot()
     
 
 
@@ -799,6 +833,26 @@ def entry_changed(*args):
     startButton.config(state="normal")
     return True
 
+def toggle_input_type(frame, depth):
+    global lever_type
+    # print("\n" + str(depth))
+    
+    for child in frame.winfo_children():
+        if isinstance(child, (Label)):
+            text = child.cget("text")
+            if lever_type:
+                child.config(text=text.replace("(g)", "(deg)").replace("Pull", "Knob"))
+            else:
+                child.config(text=text.replace("(deg)", "(g)").replace("Knob", "Pull"))
+        elif isinstance(child, (Frame)) and child != frame:
+            # print("Going deeper...")
+            toggle_input_type(child, depth + 1)
+    if depth == 0:
+        lever_type = not lever_type
+        reload_plot()
+
+def reload_plot():
+    plotData(np.array(timeDeque).astype(float), np.array(dataDeque).astype(float))
 #########################################################
 #########################################################
 ##########GGGGGG######U##############U####I##############
@@ -861,8 +915,9 @@ CadreDroite.grid(row=0, column=2, padx=20, pady=20)
 Cadre1 = Frame(CadreGauche)
 Cadre1.grid(row=1, column=1)
 
+
 # Boutons de tests_______________________________________________________________
-Title = Label(Cadre1, text="Rat Pull Task", fg='black', justify=CENTER, font=("bold", 25), padx=5, pady=25).grid(row=1, column=2)
+Title = Label(Cadre1, text="Rat Pull Task", fg='black', justify=CENTER, font=("bold", 25), padx=5, pady=25, width=11, height=1).grid(row=1, column=2)
 lamp = UILamp(Cadre1, diameter=32)
 lamp.grid(row=2, column=4)
 Connect = Button(Cadre1, text="Connect Device", command=connectArduino, width=13, font= ("Serif", 11, "bold")).grid(row=2, column=5)
@@ -897,11 +952,10 @@ feedButton.grid(row=0, column=2)
 removeOffsetButton = Button(Cadre2, text='Remove\nOffset', state=DISABLED)
 removeOffsetButton.grid(row=0, column=3)
 
+
 set_button_size(Cadre2, 10, 2, ('Serif', 10, "bold"))
 
-# Label qui montre des messages
-DisplayBox = Label(CadreGauche, text="", font=("Serif", 12))
-DisplayBox.grid(row=4, column=1, sticky="n", pady=(20,20))
+
 
 
 
@@ -1051,11 +1105,18 @@ canvas = FigureCanvasTkAgg(fig, master=Cadre6)  # tk.DrawingArea.
 canvas.get_tk_widget().grid(row=1, column=1, columnspan=2, sticky='E', pady=2)
 
 
+Cadre7 = Frame(CadreGauche)
+Cadre7.grid(row=4, column=1, sticky="n", pady=(20,20))
 
 
+typeButton = Button(Cadre7, text='Toggle Input Type', command=lambda: toggle_input_type(top, 0))
+typeButton.grid(row=1, column=2)
+# Label qui montre des messages
+DisplayBox = Label(Cadre7, text="", font=("Serif", 12))
+DisplayBox.grid(row=2, column=2, sticky="n", pady=(20,20))
 
-plotData(np.array(timeDeque).astype(float), np.array(dataDeque).astype(float))
 
+reload_plot()
 top.mainloop()
 
 
