@@ -43,7 +43,7 @@ int serialFd = 0;
 
 
 // code controllers
-const int lenBuffer = 280;
+const int lenBuffer = 25000;
 
 //state machine variables
 
@@ -94,6 +94,7 @@ bool adapt_drop_tolerance;
 // - lever values
 int moduleValue_before = 0;
 int moduleValue_now = 0;
+int moduleValue_encoder = 0;
 int peak_moduleValue = 0;
 
 // - timers
@@ -120,6 +121,7 @@ bool success = false;
 bool crashed = false;
 bool stop_session = false;
 bool pause_session = false;
+bool isr_running = false;
 
 // - hard-coded values
 int post_trial_dur = 1000;
@@ -158,6 +160,7 @@ std::string readSerial(int fd);
 void writeSerial(int fd, const std::string &data);
 
 void updateEncoderValue();
+
 
 // FONCTIONS ---------------------------------
 
@@ -220,25 +223,24 @@ void stateMachine() {
   //TODO
   // drawnow limitrate;  // process callbacks, update figures at 20Hz max
   //% read module force
+   moduleValue_before = moduleValue_now;    // store previous value
   if (input_type) {
-    moduleValue_before = moduleValue_now;    // store previous value
     moduleValue_now = analogRead(AnalogIN) * lever_gain;  // update current value
+  }
+  else {
+    moduleValue_now = moduleValue_encoder;
   }
 
   // fill force buffertrial_start_time
   // limit temp buffer size to 'buffer_dur' (last 1s of data)+
-  // tmp_value_buffer = [tmp_value_buffer(session_t - tmp_value_buffer(:, 1) <= app.buffer_dur, :); session_t moduleValue_now];
 
   auto condition = [&](const std::vector<int>& row) {
     return session_t - row[0] <= buffer_dur;
   };
-  // send_message("9.75");
-  // send_message("sizes1 trial" + String(trial_value_buffer.size()));
-  // send_message("sizes1 tmp" + String(tmp_value_buffer.size()));
+
   tmp_value_buffer.erase(
       std::remove_if(tmp_value_buffer.begin(), tmp_value_buffer.end(), 
                       [condition](const std::vector<int>& sublist) {
-                        // send_message(String(condition(sublist)));
                           return !condition(sublist);
                       }),
       tmp_value_buffer.end()
@@ -249,18 +251,6 @@ void stateMachine() {
     tmp_value_buffer.erase(tmp_value_buffer.begin());
   }
   tmp_value_buffer.push_back({session_t, moduleValue_now});
-  // send_message(String("sizes2 trial" + trial_value_buffer.size()));
-  // send_message("sizes2 tmp" + String(tmp_value_buffer.size()));
-
-  // std::vector<std::vector<int>> filtered_rows;
-  // std::copy_if(tmp_value_buffer.begin(), tmp_value_buffer.end(), std::back_inserter(filtered_rows), condition);
-  // if (filtered_rows.size() >= lenBuffer) {
-  //   filtered_rows.erase(filtered_rows.begin());
-  // }
-  // filtered_rows.push_back({session_t, moduleValue_now});
-  
-  // tmp_value_buffer = filtered_rows;
-
 
   // STATE MACHINE
 
@@ -279,7 +269,7 @@ void stateMachine() {
       }
 
       else if (num_trials >= MaxTrialNum) {
-        // send_message("Reached Maximum Number of Trials");
+        send_message("Reached Maximum Number of Trials");
         NEXT_STATE = STATE_SESSION_END;
       }
 
@@ -301,14 +291,13 @@ void stateMachine() {
       break;
     //STATE_TRIAL_INIT
     case STATE_TRIAL_INIT:
-      // send_message("STATE_TRIAL_INIT");
+       //send_message("STATE_TRIAL_INIT");
       cout << "STATE_TRIAL_INIT" << endl;
       // trial initiated
       
       //changes from original state machine
       // trial_start_time = session_t;
       
-      // send_message("Trial initiated... ");
       // play(init_sound{1});
       trial_started = true;
       num_trials = num_trials + 1;
@@ -321,31 +310,20 @@ void stateMachine() {
       
       // start recording force data (%skip last entry, it will be added below after the "if trial_started" section
       //we only want the values from this point on (because the last second will be given by the temporary buffer)
-      // trial_value_buffer.clear();
-      send_message(to_string(tmp_value_buffer.size()));
       if (tmp_value_buffer.size() > 0) {
         trial_value_buffer.clear();
-        send_message("inside if" + to_string(tmp_value_buffer.size()));
           std::transform(tmp_value_buffer.begin(), tmp_value_buffer.end() - 1, std::back_inserter(trial_value_buffer), [](const std::vector<int>& sublist) { 
           return std::vector<int>{sublist[0] - trial_start_time, sublist[1]};
           }
         );
-        send_message("sending just the tmp_buffer");
-        sendTrialData2Python(false);
-        trial_value_buffer.clear();
-      }
-      else {
-        send_message("size 0");
       }
       
-      // send_message("12");
       NEXT_STATE = STATE_TRIAL_STARTED;
-      send_message("after");
       break;
     // STATE_TRIAL_STARTED
     case STATE_TRIAL_STARTED:
       // send_message("STATE_TRIAL_STARTED");
-      cout << "STATE_TRIAL_STARTED" << endl;
+      //cout << "STATE_TRIAL_STARTED" << endl;
       // check if trial time out (give a chance to continue if force > hit_thresh)
       if (trial_time > hit_window * 1000 && moduleValue_now < hit_thresh) {
         send_message("trial_time > hit_window && moduleValue_now < hit_thresh");
@@ -354,12 +332,10 @@ void stateMachine() {
       // check if force decreased from peak too much
       else if (moduleValue_now <= (peak_moduleValue - failure_tolerance)) {
         send_message("moduleValue_now <= (peak_moduleValue - failure_tolerance)");
-        // send_message(to_string(peak_moduleValue));
         NEXT_STATE = STATE_FAILURE;
       }
       // check if hit threshold has been reached
       else if (moduleValue_now >= hit_thresh) {
-        digitalWrite(13, HIGH);
         send_message("moduleValue_now >= hit_thresh");
         hold_timer = millis();
         NEXT_STATE = STATE_HOLD;
@@ -368,7 +344,7 @@ void stateMachine() {
     // STATE_HOLD
     case STATE_HOLD:
       // send_message("STATE_HOLD");
-      cout << "STATE_HOLD" << endl;
+      //cout << "STATE_HOLD" << endl;
       //check if still in reward zone
       if (moduleValue_now < hit_thresh) {
         hold_timer = millis();
@@ -382,7 +358,7 @@ void stateMachine() {
     case STATE_SUCCESS:
       trial_hit_thresh = hit_thresh;
       trial_hold_time = hold_time;
-      send_message("STATE_SUCCESS");
+      //send_message("STATE_SUCCESS");
       cout << "STATE_SUCCESS" << endl;
       // we have a success! execute only once
       send_message("trial successful! :D");
@@ -427,7 +403,7 @@ void stateMachine() {
       break;
     // STATE_FAILURE
     case STATE_FAILURE:
-      send_message("STATE_FAILURE");
+      //send_message("STATE_FAILURE");
       cout << "STATE_FAILURE" << endl;
       trial_hit_thresh = hit_thresh;
       trial_hold_time = hold_time;
@@ -465,7 +441,7 @@ void stateMachine() {
     // STATE_POST_TRIAL
     case STATE_POST_TRIAL:
       // send_message("STATE_POST_TRIAL");
-      cout << "STATE_POST_TRIAL" << endl;
+      //cout << "STATE_POST_TRIAL" << endl;
       // wait to accumulate a bit of post_trial data
       if (trial_time - trial_end_time >= post_trial_dur) {
         NEXT_STATE = STATE_PARAM_UPDATE;
@@ -496,7 +472,6 @@ void stateMachine() {
 
       break;
     case STATE_SESSION_END:
-      send_message(to_string(millis()));
       send_message("done");
       send_message("STATE_SESSION_END");
       
@@ -519,52 +494,67 @@ void stateMachine() {
 
 bool attached = false;
 void enableInterrupt(int pin) {
-  //if (!attached) {
-    if (wiringPiISR(pin, INT_EDGE_BOTH, &updateEncoderValue) == -1) {
-      cout << "Failed to enable interrupt" << endl;
-    }
-    attached = true;
-  //}
-  std::cout << "Interrupts enabled on pin " << pin << std::endl;
+  std::cout << "Enabling on pin " << pin << std::endl;
+  if (wiringPiISR(pin, INT_EDGE_BOTH, &updateEncoderValue)  < 0) {
+    cout << "Failed to enable interrupt" << endl;
+  }
+  //std::cout << "Interrupts enabled on pin " << pin << std::endl;
 }
 
 void disableInterrupt(int pin) {
-  //if (attached) {
-    if (wiringPiISR(pin, INT_EDGE_BOTH, NULL) == -1) {
-      cout << "Failed to disable interrupt" << endl;
-    }
-    attached = false;
-     // Detach ISR by attaching NULL
-    std::cout << "Interrupts disabled on pin " << pin << std::endl;
-    
-  //}
+  std::cout << "Disabling on pin " << pin << std::endl;
+  if (wiringPiISR(pin, INT_EDGE_BOTH, NULL) < 0) {
+    cout << "Failed to disable interrupt" << endl;
+  }
+   // Detach ISR by attaching NULL
+  //std::cout << "Interrupts disabled on pin " << pin << std::endl;
 
 }
 
 void enableInterrupts() {
-  enableInterrupt(pinA);
-  enableInterrupt(pinB);
+  if (!attached) {
+    while (isr_running) {
+      usleep(10);
+    }
+    enableInterrupt(pinA);
+    enableInterrupt(pinB);
+    attached = true;
+  }
 }
 
 void disableInterrupts() {
-  disableInterrupt(pinA);
-  disableInterrupt(pinB);
+  if (attached) {
+    //stringstream command;
+    //command << "/usr/local/bin/gpio edge " << pinA << " none";
+    //string commandStr = command.str();
+    //system(commandStr.c_str());
+    //stringstream command2;
+    //command2 << "/usr/local/bin/gpio edge " << pinB << " none";
+    //string commandStr2 = command2.str();
+    //system(commandStr2.c_str());
+    
+    while (isr_running) {
+      usleep(10);
+    }
+    disableInterrupt(pinA);
+    disableInterrupt(pinB);
+    attached = false;
+  }
+  int i = 0;
+  i ++;
 }
 
 bool sending = false;
 void sendTrialData2Python(bool done) {
-  disableInterrupts();
-  cout << "Sending trial data" << endl;
+  //serialFlush(serialFd);
   sending = true;
   string dataDelimiter = "trialData";
   writeSerial(serialFd, dataDelimiter);
   for (size_t i = 0; i < trial_value_buffer.size(); i++) {
-    
     writeSerial(serialFd, to_string(trial_value_buffer[i][0]));
     writeSerial(serialFd, "/");
     writeSerial(serialFd, to_string(trial_value_buffer[i][1]));
     writeSerial(serialFd, ";");
-    
   }
   writeSerial(serialFd, "nt");
   writeSerial(serialFd, to_string(num_trials));
@@ -597,16 +587,16 @@ void sendTrialData2Python(bool done) {
   writeSerial(serialFd, "\r\n");
 
   
-  serialFlush(serialFd);
+  //serialFlush(serialFd);
   sending = false;
-  enableInterrupts();
-
   // code de fin d'envoi de données
+  
 }
 
 long h = 0;
 
 void send_message(const string& message) {
+  //serialFlush(serialFd);
   if (h % 1 == 0) {
     string messageDelimiter = "message";
     writeSerial(serialFd, messageDelimiter);
@@ -615,34 +605,31 @@ void send_message(const string& message) {
     writeSerial(serialFd, "fin");
     writeSerial(serialFd, "\r\n");
 
-    serialFlush(serialFd);
+   
     // code de fin d'envoi de données
   }
   h += 1;
-  
+  //serialFlush(serialFd);
 }
 
 void updateEncoderValue() {
+  isr_running = true;
   int encoderA = digitalRead(pinA);
   int encoderB = digitalRead(pinB);
 
   if (encoderA != previousA && previousA != -1) {
     if (encoderB != encoderA) {
-      // encoderPos ++;
       encoderPos ++;
     }
     else {
-      // encoderPos --;
       encoderPos --;
     }
   }
   if (encoderB != previousB && previousB != -1) {
     if (encoderB == encoderA) {
-      // encoderPos ++;
       encoderPos ++;
     }
     else {
-      // encoderPos --;
       if (encoderPos > 0) {
         encoderPos --;
       }
@@ -650,18 +637,13 @@ void updateEncoderValue() {
     }
   }
   
-  
-
   previousA = encoderA;
   previousB = encoderB;
   
   int angle = ((encoderPos / 4)); //%360 abs
-  cout << "A: " << encoderA << " B : " << encoderB << endl;
-  cout << "encoderPos" << encoderPos << endl;
-  cout << "angle" << angle << endl;
   previous_angle = angle;
-
-  moduleValue_now = angle;
+  moduleValue_encoder = angle;
+  isr_running = false;
 }
 
 void feed() {
@@ -683,10 +665,6 @@ void experimentOn() {
     else if (serialCommand[0] == 'c') {
       if (!pause_session) {
         pause_timer = millis();
-      }
-      else {
-        send_message("pause time");
-        send_message(to_string(pause_time));
       }
       pause_session = !pause_session;
       serialCommand = "s";
@@ -725,10 +703,10 @@ bool stringToBool(const std::string& str) {
 }
 
 void reInitialize() {
-  serialFlush(serialFd);
+  //serialFlush(serialFd);
   CURRENT_STATE = STATE_IDLE;
   NEXT_STATE = CURRENT_STATE; 
-  tmp_value_buffer.clear();    // [time value], first row is oldest data
+  //tmp_value_buffer.clear();    // [time value], first row is oldest data
   trial_value_buffer.clear();  // [time value]
   past_10_trials_succ.clear();
   num_pellets = 0;
@@ -764,7 +742,6 @@ std::string readSerial(int fd) {
       while(serialDataAvail(serialFd)) {
         buffer += serialGetchar(serialFd);
       }
-      cout << "Received: " << buffer << endl;
     }
     return buffer;
 }
@@ -778,23 +755,15 @@ bool empty_stated = false;
 int main() {
 	// Initialize wiringPi library and serial port
   //SETUP
-
-
-  
-  
-  std::cout << "Running main " << serialCommand << std::endl;
 	if (wiringPiSetup() == -1) {
         std::cerr << "WiringPi setup failed" << std::endl;
         return 1;
   }
   //serialFd = serialOpen("/dev/ttyAMA0", 115200); //baud rate
-  serialFd = serialOpen("/dev/pts/5", 115200); //baud rate
+  serialFd = serialOpen("/dev/pts/3", 115200); //baud rate
   if (serialFd == -1) {
         std::cout << "Failed to open serial port: " << std::endl;
         return 1;
-    }
-    else {
-      std::cout << serialFd << std::endl;
     }
    // Set pin modes
   //pinMode(AnalogIN, INPUT);
@@ -816,14 +785,11 @@ int main() {
     serialCommand = "";
     while (serialDataAvail(serialFd)) {
       char ch = serialGetchar(serialFd);
-      //std::cout << "Received character: " << ch << std::endl;
       serialCommand += ch;
     }
     
     //std::cout << serialCommand << std::endl;
     if (!serialCommand.empty()) {
-            
-            std::cout << "Received: " << serialCommand << std::endl;
             empty_stated = true;
             switch (serialCommand[0]) {  // Première lettre de la commande
               case 'w':  // boucle defaut standby
@@ -854,7 +820,8 @@ int main() {
                 input_type = stringToBool(parts[17]);
                 
                 if(input_type) {
-                  disableInterrupts();
+                  //disableInterrupts();
+                  enableInterrupts();
                 }
                 else {
                   enableInterrupts();

@@ -172,7 +172,6 @@ def readArduinoLine():
     print(output)
     if ("message" in output and "fin\r\n" in output):
         output = output.removeprefix("message")
-        print("here")
         output = output.removesuffix("fin\r\n")
         stateList.append(output)    
         print("*\n*")
@@ -192,19 +191,28 @@ def readArduinoLine():
         # data = output.split(";nt", 1)
         data = output.split("nt", 1)
         trial_data = data[0].split(";")
+        print(len(trial_data))
         # dataDeque = deque([0] * buffer_size, maxlen=buffer_size)
         # timeDeque = deque([0] * buffer_size, maxlen=buffer_size) 
         for pair in trial_data:
             if pair:  # Ignore empty strings
-                print(pair, end=' ')
+#                 print(pair, end=' ')
                 try:
                     time, value = pair.split('/')
                 except ValueError as e:
                     print("pair : " + str(pair))
-                    raise(e)
-                if not (time == '0' and value == '0') and abs(float(time)) < 10000 and float(value) < 2000:
-                    dataDeque.extend([value])
-                    timeDeque.extend([time])
+                    print(e)
+                except Exception as e:
+                     print("pair : " + str(pair))
+                     print(e)
+                try:
+                    if not (time == '0' and value == '0') and abs(float(time)) < 10000 and float(value) < 2000:
+                        dataDeque.extend([value])
+                        timeDeque.extend([time])
+                except ValueError as e:
+                    print("pair : " + str(pair))
+                    print(e)
+                    continue
         print("\n")
 
         
@@ -232,6 +240,7 @@ def readArduinoLine():
         # timeDeque = deque([0] * buffer_size, maxlen=buffer_size) 
         dataDeque.clear()
         timeDeque.clear()
+        stateList.clear()
 
     
     
@@ -306,6 +315,17 @@ def plotData(time_Array, data_Array):
         if float(time_Array[i]) != 0:
             length = i
             break
+    sum = 0
+    for i in range(len(time_Array) - 1):
+        sum += time_Array[i + 1] - time_Array[i];
+    if (len(time_Array) > 0):
+        average = sum / len(time_Array)
+        time_total = (time_Array[len(time_Array) - 1] - time_Array[0]) / 1000
+        print("Time total" + str(time_total))
+        hertz = len(data_Array) / time_total
+        print("Average time between! : " + str(average))
+        print("Time example: " + str(time_Array[0]) + " " + str(time_Array[len(time_Array) - 1]))
+        print("Hertz : " + str(hertz))
     time_Array = time_Array[length:]
     data_Array = data_Array[length:]
     # for i in range(len(time_Array)):
