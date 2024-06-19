@@ -274,6 +274,7 @@ void stateMachine() {
       
       // send_message("Trial initiated... ");
       // play(init_sound{1});
+      // play(1.5);
       trial_started = true;
       num_trials = num_trials + 1;
 
@@ -350,6 +351,7 @@ void stateMachine() {
 
       //TODO
       // play(reward_sound{1});
+      // play(1.25);
       // drawnow;
       success = true;
       trial_end_time = trial_time;
@@ -395,6 +397,7 @@ void stateMachine() {
       send_message("trial failed :(");
       //TODO
       // play(failure_sound{1});
+      // play(1.75);
 
       if (past_10_trials_succ.size() >= 10) {
         past_10_trials_succ.pop_back();
@@ -474,6 +477,18 @@ void stateMachine() {
   }
 
   CURRENT_STATE = NEXT_STATE;
+}
+
+void play(double seconds) {
+  send_message("Playing");
+  digitalWrite(8, HIGH);
+  // int start = millis();
+  // int now = millis();
+  // while(now - start < seconds * 10000) {
+  //   digitalWrite(8, HIGH);
+  //   now = millis();
+  // }
+  // digitalWrite(8, LOW);
 }
 
 bool sending = false;
@@ -682,6 +697,25 @@ void setup() {
   
   pinMode(pinA, INPUT);// Internal pull-up resistor for switch A
   pinMode(pinB, INPUT);// Internal pull-up resistor for switch B
+
+  pinMode(4, OUTPUT);
+  digitalWrite(4, HIGH);
+  pinMode(5, OUTPUT);
+  digitalWrite(5, HIGH);
+  pinMode(6, OUTPUT);
+  digitalWrite(6, HIGH);
+  pinMode(7, OUTPUT);
+  digitalWrite(7, HIGH);
+  pinMode(8, OUTPUT);
+  digitalWrite(8, HIGH);
+  pinMode(9, OUTPUT);
+  digitalWrite(9, HIGH);
+  pinMode(10, OUTPUT);
+  digitalWrite(10, HIGH);
+  pinMode(11, OUTPUT);
+  digitalWrite(11, HIGH);
+  pinMode(12, OUTPUT);
+  digitalWrite(12, HIGH);
   
   SerialUSB.begin(115200);      // baud rate
   startArduinoProg = millis();  // début programme
