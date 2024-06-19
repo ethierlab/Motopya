@@ -698,24 +698,8 @@ void setup() {
   pinMode(pinA, INPUT);// Internal pull-up resistor for switch A
   pinMode(pinB, INPUT);// Internal pull-up resistor for switch B
 
-  pinMode(4, OUTPUT);
-  digitalWrite(4, HIGH);
-  pinMode(5, OUTPUT);
-  digitalWrite(5, HIGH);
-  pinMode(6, OUTPUT);
-  digitalWrite(6, HIGH);
-  pinMode(7, OUTPUT);
-  digitalWrite(7, HIGH);
   pinMode(8, OUTPUT);
-  digitalWrite(8, HIGH);
-  pinMode(9, OUTPUT);
-  digitalWrite(9, HIGH);
-  pinMode(10, OUTPUT);
-  digitalWrite(10, HIGH);
-  pinMode(11, OUTPUT);
-  digitalWrite(11, HIGH);
-  pinMode(12, OUTPUT);
-  digitalWrite(12, HIGH);
+  digitalWrite(8, HIGH);;
   
   SerialUSB.begin(115200);      // baud rate
   startArduinoProg = millis();  // début programme
