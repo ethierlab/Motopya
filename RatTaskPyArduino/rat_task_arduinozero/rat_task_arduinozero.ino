@@ -76,6 +76,7 @@ bool adapt_drop_tolerance;
 // - lever values
 int moduleValue_before = 0;
 int moduleValue_now = 0;
+int moduleValue_encoder = 0;
 int peak_moduleValue = 0;
 
 // - timers
@@ -188,21 +189,21 @@ void stateMachine() {
   //TODO
   // drawnow limitrate;  // process callbacks, update figures at 20Hz max
   //% read module force
+  moduleValue_before = moduleValue_now;    // store previous value
   if (input_type) {
-    moduleValue_before = moduleValue_now;    // store previous value
     moduleValue_now = analogRead(AnalogIN) * lever_gain;  // update current value
   }
-
+  else {
+    moduleValue_now = moduleValue_encoder;
+  }
   // fill force buffertrial_start_time
   // limit temp buffer size to 'buffer_dur' (last 1s of data)+
-  // tmp_value_buffer = [tmp_value_buffer(session_t - tmp_value_buffer(:, 1) <= app.buffer_dur, :); session_t moduleValue_now];
+
 
   auto condition = [&](const std::vector<int>& row) {
     return session_t - row[0] <= buffer_dur;
   };
-  // send_message("9.75");
-  // send_message("sizes1 trial" + String(trial_value_buffer.size()));
-  // send_message("sizes1 tmp" + String(tmp_value_buffer.size()));
+  
   tmp_value_buffer.erase(
       std::remove_if(tmp_value_buffer.begin(), tmp_value_buffer.end(), 
                       [condition](const std::vector<int>& sublist) {
@@ -217,17 +218,7 @@ void stateMachine() {
     tmp_value_buffer.erase(tmp_value_buffer.begin());
   }
   tmp_value_buffer.push_back({session_t, moduleValue_now});
-  // send_message(String("sizes2 trial" + trial_value_buffer.size()));
-  // send_message("sizes2 tmp" + String(tmp_value_buffer.size()));
 
-  // std::vector<std::vector<int>> filtered_rows;
-  // std::copy_if(tmp_value_buffer.begin(), tmp_value_buffer.end(), std::back_inserter(filtered_rows), condition);
-  // if (filtered_rows.size() >= lenBuffer) {
-  //   filtered_rows.erase(filtered_rows.begin());
-  // }
-  // filtered_rows.push_back({session_t, moduleValue_now});
-  
-  // tmp_value_buffer = filtered_rows;
   if (trial_started) {
     recordCurrentValue();
 
@@ -604,7 +595,7 @@ void updateEncoderValue() {
 
   previous_angle = angle;
 
-  moduleValue_now = angle;
+  moduleValue_encoder = angle;
 }
 
 
