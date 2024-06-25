@@ -1,6 +1,6 @@
 WELCOME TO MOTOPYA!
 
-This software is being created to accomplish tasks previously executed on matlab with Mototrak device. Instead of retrieving data using matlab on the computer, this software is aimed to be used on either an arduino or raspberry pi in order to achieve faster data retrieval 
+This software is being created to accomplish tasks previously executed on Matlab with Mototrak devices. Instead of retrieving data using Matlab on the computer, this software is aimed to be used on either an arduino or raspberry pi in order to achieve faster data retrieval 
 and a more independant system. 
 
 Here are the usage directions for each option:
