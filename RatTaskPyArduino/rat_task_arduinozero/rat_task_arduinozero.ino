@@ -1,3 +1,5 @@
+#include <107-Arduino-BoostUnits.h>
+
 #include <queue>
 #include <chrono>
 #include <string>
@@ -16,6 +18,10 @@ int AnalogIN = A0;
 const int pinA = 2;  // A output
 const int pinB = 3;  // B output
 String serialCommand = "wait";
+
+int init_sound       = 400;  // 4kHz
+int reward_sound     = 1000; // 10kHz
+int failure_sound    = 100;  // 1kHz
 
 
 int initial;
@@ -253,6 +259,7 @@ void stateMachine() {
         trial_start_time = session_t;
 
         trial_started = true;
+        play(500, init_sound);
       }
       break;
     //STATE_TRIAL_INIT
@@ -265,7 +272,7 @@ void stateMachine() {
       
       // send_message("Trial initiated... ");
       // play(init_sound{1});
-      // play(1.5);
+      // play(500, init_sound);
       trial_started = true;
       num_trials = num_trials + 1;
 
@@ -290,9 +297,6 @@ void stateMachine() {
         sendTrialData2Python(false);
         trial_value_buffer.clear();
       }
-      else {
-        send_message("size 0");
-      }
       
       // send_message("12");
       NEXT_STATE = STATE_TRIAL_STARTED;
@@ -314,7 +318,6 @@ void stateMachine() {
       }
       // check if hit threshold has been reached
       else if (moduleValue_now >= hit_thresh) {
-        digitalWrite(13, HIGH);
         send_message("moduleValue_now >= hit_thresh");
         hold_timer = millis();
         NEXT_STATE = STATE_HOLD;
@@ -342,7 +345,7 @@ void stateMachine() {
 
       //TODO
       // play(reward_sound{1});
-      // play(1.25);
+      play(750, reward_sound);
       // drawnow;
       success = true;
       trial_end_time = trial_time;
@@ -386,9 +389,9 @@ void stateMachine() {
       trial_hold_time = hold_time;
       // trial failed. execute only once
       send_message("trial failed :(");
-      //TODO
-      // play(failure_sound{1});
-      // play(1.75);
+      
+
+      play(1000, failure_sound );
 
       if (past_10_trials_succ.size() >= 10) {
         past_10_trials_succ.pop_back();
@@ -470,16 +473,19 @@ void stateMachine() {
   CURRENT_STATE = NEXT_STATE;
 }
 
-void play(double seconds) {
-  send_message("Playing");
-  digitalWrite(8, HIGH);
-  // int start = millis();
-  // int now = millis();
-  // while(now - start < seconds * 10000) {
-  //   digitalWrite(8, HIGH);
-  //   now = millis();
-  // }
-  // digitalWrite(8, LOW);
+int prev_tone = 0;
+
+void play(int milliseconds, int freq) {
+  send_message("in play");
+  if (prev_tone != freq) {
+    send_message("Prev was different");
+    send_message(String(prev_tone) + " vs " + String(freq));
+
+    // noTone(8);
+    tone(8, freq, milliseconds);
+    // delay(milliseconds);
+  }
+  prev_tone = freq; 
 }
 
 bool sending = false;
@@ -490,14 +496,14 @@ void sendTrialData2Python(bool done) {
   String dataDelimiter = "trialData";
   SerialUSB.print(dataDelimiter);
   for (int i = 0; i < trial_value_buffer.size(); i++) {
-    noInterrupts();
+    detachInterrupts();
     SerialUSB.print(trial_value_buffer[i][0]);
     SerialUSB.print("/");
     SerialUSB.print(trial_value_buffer[i][1]);
     SerialUSB.print(";");
-    interrupts();
+    attachInterrupts();
   }
-  noInterrupts();
+  detachInterrupts();
   SerialUSB.print("nt");
   SerialUSB.print(String(num_trials));
   SerialUSB.print(";");
@@ -530,7 +536,7 @@ void sendTrialData2Python(bool done) {
 
   SerialUSB.flush();
   sending = false;
-  interrupts();
+  attachInterrupts();
   // interrupts();
   // code de fin d'envoi de données
 }
@@ -659,6 +665,16 @@ bool stringToBool(const std::string& str) {
     return false;
 }
 
+void attachInterrupts() {
+  attachInterrupt(digitalPinToInterrupt(pinA), updateEncoderValue, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(pinB), updateEncoderValue, CHANGE);
+}
+
+void detachInterrupts() {
+  detachInterrupt(digitalPinToInterrupt(pinA));
+  detachInterrupt(digitalPinToInterrupt(pinB));
+}
+
 void reInitialize() {
   SerialUSB.flush();
   CURRENT_STATE = STATE_IDLE;
@@ -679,7 +695,6 @@ void reInitialize() {
   pause_time = 0;
 }
 
-
 // INITIALISATION-------------------------------
 void setup() {
   // put your setup code here, to run once:
@@ -688,10 +703,8 @@ void setup() {
   
   pinMode(pinA, INPUT);// Internal pull-up resistor for switch A
   pinMode(pinB, INPUT);// Internal pull-up resistor for switch B
+  pinMode(8, OUTPUT); // Sound output
 
-  pinMode(8, OUTPUT);
-  digitalWrite(8, HIGH);;
-  
   SerialUSB.begin(115200);      // baud rate
   startArduinoProg = millis();  // début programme
   loop_timer = millis();
@@ -700,6 +713,7 @@ void setup() {
 
 
 void loop() {
+
   if (SerialUSB.available() > 0) {
     serialCommand = SerialUSB.readStringUntil('\r');
   }

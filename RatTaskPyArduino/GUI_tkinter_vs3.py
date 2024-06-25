@@ -165,10 +165,9 @@ def readArduinoLine():
     global num_trials, num_pellets, num_rewards
     output = arduino.readline()
     output = str(output, 'utf-8')
-    print(output)
+    # print(output)
     if ("message" in output and "fin\r\n" in output):
         output = output.removeprefix("message")
-        print("here")
         output = output.removesuffix("fin\r\n")
         stateList.append(output)    
         print("*\n*")
@@ -192,7 +191,7 @@ def readArduinoLine():
         # timeDeque = deque([0] * buffer_size, maxlen=buffer_size) 
         for pair in trial_data:
             if pair:  # Ignore empty strings
-                print(pair, end=' ')
+                # print(pair, end=' ')
                 try:
                     time, value = pair.split('/')
                 except ValueError as e:
@@ -205,10 +204,10 @@ def readArduinoLine():
 
         
         zipped = list(zip(timeDeque, dataDeque))
-        for item in range(len(zipped)):
-            if (float(zipped[item][0]) > 10000):
-                print(str(item) + str(zipped[item]), end = " ")
-        print("x")
+        # for item in range(len(zipped)):
+        #     if (float(zipped[item][0]) > 10000):
+                # print(str(item) + str(zipped[item]), end = " ")
+        # print("x")
         
         
 # Iterate over the zipped object
@@ -218,7 +217,7 @@ def readArduinoLine():
 
         if partial:
             pieces += 1
-            print("PARTIAL SPLIT")
+            # print("PARTIAL SPLIT")
             return False, np.zeros(0), np.zeros(0)
         
         pieces += 1
@@ -778,7 +777,7 @@ def send_parameters():
     for value in parameters.values():
         message += str(value.get()) + ";"
     message += str(lever_type)
-    print(message)
+    # print(message)
     sendArduino(message)
     # sendArduino("p" + init_thresh + ";" + init_baseline + ";" + min_duration + ";" + hit_window + ";" + hit_thresh)
     reload_plot()
