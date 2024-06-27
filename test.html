@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MotoTrak</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            display: flex;
+        }
+        .left, .right {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin: 10px;
+        }
+        .left {
+            width: 50%;
+        }
+        .right {
+            width: 50%;
+        }
+        .row {
+            display: flex;
+            margin-bottom: 10px;
+        }
+        .label {
+            width: 200px;
+        }
+        .input {
+            flex: 1;
+        }
+        .graph {
+            border: 1px solid #ccc;
+            width: 100%;
+            height: 300px;
+        }
+        .button {
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="left">
+            <h2>MotoTrak</h2>
+            <div class="row">
+                <div class="label">Rat ID:</div>
+                <div class="input"><input type="text"></div>
+            </div>
+            <div class="row">
+                <div class="label">Save location (parent folder):</div>
+                <div class="input"><input type="text"> <button>Browse</button></div>
+            </div>
+            <div class="row">
+                <div class="label">Calibration file location:</div>
+                <div class="input"><input type="text" value="Calibration2"> <button>Change</button></div>
+            </div>
+            <div class="row">
+                <div class="input"><button>Connect MotoTrak</button> <button>Retract Sensor at Pos</button></div>
+            </div>
+            <h3>Digital output:</h3>
+            <div class="row">
+                <div class="input"><input type="radio" name="output" checked> Stimulation <input type="radio" name="output"> Behavioral Events</div>
+            </div>
+            <div class="row">
+                <div class="label"><input type="radio" name="stimulation" checked> Random</div>
+                <div class="input">Stime Rate (%): <input type="text" size="4"> n pulses: <input type="text" size="4"></div>
+            </div>
+            <div class="row">
+                <div class="label"><input type="radio" name="stimulation"> Conditional</div>
+                <div class="input">Tolerance (deg): <input type="text" size="4"></div>
+            </div>
+            <div class="row">
+                <div class="label"><input type="radio" name="stimulation"> Manual</div>
+                <div class="input"><button>Stimulate</button></div>
+            </div>
+            <h3>Parameters:</h3>
+            <div class="row">
+                <div class="label">Hit thresh (deg):</div>
+                <div class="input">adaptive <input type="text" size="4"> min <input type="text" size="4"> max <input type="text" size="4"></div>
+            </div>
+            <div class="row">
+                <div class="label">Init thresh (deg):</div>
+                <div class="input"><input type="text" size="4"></div>
+            </div>
+            <div class="row">
+                <div class="label">Max Trials (num):</div>
+                <div class="input"><input type="text" size="4"></div>
+            </div>
+            <div class="row">
+                <div class="label">Max Duration (min):</div>
+                <div class="input"><input type="text" size="4"></div>
+            </div>
+            <div class="row">
+                <div class="label">Sensor pos (cm):</div>
+                <div class="input"><input type="text" size="4"></div>
+            </div>
+            <div class="row">
+                <div class="label">Hit window (s):</div>
+                <div class="input"><input type="text" size="4"></div>
+            </div>
+            <div class="row">
+                <div class="label">Failure Tolerance (deg):</div>
+                <div class="input"><input type="text" size="4"></div>
+            </div>
+            <div class="row">
+                <div class="input"><button>Adjust Lever Baseline</button></div>
+            </div>
+        </div>
+        <div class="right">
+            <div class="row">
+                <div class="label">Num Trials:</div>
+                <div class="input">0</div>
+            </div>
+            <div class="row">
+                <div class="label">Median Peak:</div>
+                <div class="input">0</div>
+            </div>
+            <div class="row">
+                <div class="label">Num Rewards:</div>
+                <div class="input">0</div>
+            </div>
+            <div class="row">
+                <div class="label">Pellets delivered:</div>
+                <div class="input">0 (0.000 g)</div>
+            </div>
+            <div class="row">
+                <div class="label">Num Stimulations:</div>
+                <div class="input">0</div>
+            </div>
+            <div class="row">
+                <div class="label">Time elapsed:</div>
+                <div class="input">00:00:00</div>
+            </div>
+            <div class="row">
+                <div class="label">Historical Hit Threshold:</div>
+                <div class="input"><input type="text" size="4"></div>
+            </div>
+            <h3>Knob Rotation Angle</h3>
+            <div class="graph"></div>
+            <div class="row">
+                <div class="input">
+                    <button class="button">START</button>
+                    <button class="button">PAUSE</button>
+                    <button class="button">STOP</button>
+                    <button class="button">FEED</button>
+                    <button class="button">reset</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
