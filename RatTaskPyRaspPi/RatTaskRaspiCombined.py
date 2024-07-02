@@ -25,6 +25,9 @@ import time
 import threading
 import numpy as np
 
+
+serialBuffer = ""
+
 # SETTINGS
 AnalogIN = 0
 pinA = 2
@@ -335,7 +338,7 @@ def read_analog(channel):
     # Replace this with actual hardware interaction in practice.
     return np.random.randint(0, 1024)
 
-def send_trial_data_to_python(trial_end):
+def send_trial_data_to_python(done):
     global trial_value_buffer, success, trial_hit_thresh, trial_hold_time
     trial_data = {
         "trial_end": trial_end,
@@ -345,6 +348,50 @@ def send_trial_data_to_python(trial_end):
         "data": trial_value_buffer
     }
     print(trial_data)  # Replace with actual data sending mechanism.
+    global serialBuffer, sending
+    sending = True
+    dataDelimiter = "trialData"
+    serialBuffer.append(dataDelimiter)
+    for i in range(len(trial_value_buffer)):
+        # detachInterrupts();
+        serialBuffer.append(trial_value_buffer[i][0])
+        serialBuffer.append("/")
+        serialBuffer.append(trial_value_buffer[i][1])
+        serialBuffer.append(";")
+        # attachInterrupts();
+    # detachInterrupts();
+    serialBuffer.append("nt")
+    serialBuffer.append(num_trials)
+    serialBuffer.append(";")
+    serialBuffer.append(trial_start_time)
+    serialBuffer.append(";")
+    serialBuffer.append(init_thresh)
+    serialBuffer.append(";")
+    serialBuffer.append(hold_time)
+    serialBuffer.append(";")
+    serialBuffer.append(hit_thresh)
+    serialBuffer.append(";")
+    serialBuffer.append(trial_end_time)
+    serialBuffer.append(";")
+    serialBuffer.append(success)
+    serialBuffer.append(";")
+    serialBuffer.append(peak_moduleValue)
+    serialBuffer.append(";")
+    serialBuffer.append(num_pellets)
+    serialBuffer.append(";")
+    serialBuffer.append(num_rewards)
+    serialBuffer.append(";")
+    serialBuffer.append(trial_hold_time)
+    serialBuffer.append(";")
+    serialBuffer.append(trial_hit_thresh)
+    if (not done):
+        serialBuffer.append("partialEnd");
+    serialBuffer.append("fin\n");
+    
+    sending = False;
+    # attachInterrupts();
+    # interrupts();
+    # code de fin d'envoi de données
 
 def send_message(msg):
     print(msg)  # Replace with actual message sending mechanism.
@@ -506,51 +553,51 @@ def testConnection():
         return False
 
 def connectArduino():
-#     global arduino
-#     global connected
-#     clear_stats()
-#     ports = serial.tools.list_ports.comports()
-#     port_found = None
-#     for port in ports:
-#         print("Port:", port.device)
-#         print("Description:", port.description)
-#         print("Hardware ID:", port.hwid)
-#         print("Manufacturer:", port.manufacturer)
-#         print("Product:", port.product)
-#         print("Serial Number:", port.serial_number)
-#         print("===================================")
-#         if (not port.description):
-#             port.description = ""
-#         if (not port.manufacturer):
-#             port.manufacturer = ""
-#         if "tty" in port.description.lower() or "tty" in port.manufacturer.lower() or "tty" in port.device.lower():
-#             print(port.description.lower())
-#             description = port.description
-#             print(description)
-#             port_found = port.device
-#     port_found = "/dev/pts/4"
-#     description = "the raspberry pi"
-#     if port_found == None:
-#         print("Arduino not found")
-#         lamp.turn_off()
-#         return
-#     else:
-#         print(f"Arduino found at port {port_found} in description {description}")
-#         lamp.turn_on()
+    print("connecting")
+    global connected
+    clear_stats()
+    ports = serial.tools.list_ports.comports()
+    port_found = None
+    for port in ports:
+        print("Port:", port.device)
+        print("Description:", port.description)
+        print("Hardware ID:", port.hwid)
+        print("Manufacturer:", port.manufacturer)
+        print("Product:", port.product)
+        print("Serial Number:", port.serial_number)
+        print("===================================")
+        if (not port.description):
+            port.description = ""
+        if (not port.manufacturer):
+            port.manufacturer = ""
+        if "tty" in port.description.lower() or "tty" in port.manufacturer.lower() or "tty" in port.device.lower():
+            print(port.description.lower())
+            description = port.description
+            print(description)
+            port_found = port.device
+    port_found = "/dev/pts/4"
+    description = "the raspberry pi"
+    if port_found == None:
+        print("Arduino not found")
+        lamp.turn_off()
+        return
+    else:
+        print(f"Arduino found at port {port_found} in description {description}")
+        lamp.turn_on()
         
 
     
     # Serial communication
-#     if arduino:
-#         arduino.close()
-#     arduino = serial.Serial(port_found, 115211)
-#     t.sleep(1)
-#     arduino.flushInput()  # vide le buffer en provenance de l'arduino
-#     connected = True
-# 
-#     testConnection()
-# 
-#     entry_changed()
+    # if arduino:
+    #     arduino.close()
+    # arduino = serial.Serial(port_found, 115211)
+    t.sleep(1)
+    # arduino.flushInput()  # vide le buffer en provenance de l'arduino
+    connected = True
+
+    testConnection()
+
+    entry_changed()
         
 
 # Boutons de contrôle____________________________________________________________
@@ -583,19 +630,10 @@ def readArduinoInput():
     else:
         print("received")
 
-    # if (len(dataArray) < buffer_size):
-    #     dataArray = np.pad(dataArray, (0,  (buffer_size - len(dataArray))), mode="constant")
-    # elif (len(dataArray) > buffer_size):
-    #     tempData = np.array(dataArray[len(dataArray) - buffer_size:])
-    #     dataArray = np.reshape(tempData, (1, -1))
-
     # # Deuxième ligne
         
-
-    # # compilation des essais
-    # sensorValueTrial = np.vstack((sensorValueTrial, dataArray))
-    # sensorTimeStamp = np.vstack((sensorTimeStamp, timeArray))  # les temps pour chacun des essais
     plotData(timeArray, dataArray)
+    
     # arduino.flushInput()  # vide le buffer en provenance de l'arduino
 
 stateList = []
@@ -607,6 +645,8 @@ def readArduinoLine():
     global num_trials, num_pellets, num_rewards
 #     output = arduino.readline()
 #     output = str(output, 'utf-8') 
+    output = serialBuffer
+    serialBuffer = ""
     print(output)
     if ("message" in output and "fin\r\n" in output):
         output = output.removeprefix("message")
@@ -912,8 +952,8 @@ def start():
     if not testConnection():
         return
     try:
-        arduino.flush()
-        arduino.flushInput()
+        # arduino.flush()
+        # arduino.flushInput()
         send_parameters()
         sendArduino("s" + parameters["iniThreshold"].get() + "b" + parameters["iniBaseline"].get()) # déclenche la boucle essai dans arduino et envoie le seuil pour déclencher l essaie
         # t.sleep(8) # permet au buffer d'arduino de se remplir
@@ -927,7 +967,9 @@ def start():
             chronometer(debut)
             updateDisplayValues()
             try:
-                if arduino.inWaiting() > 1:
+                # if arduino.inWaiting() > 1:
+                #     readArduinoInput()
+                if serialBuffer != "":
                     readArduinoInput()
                 top.update()
             except serial.SerialException:
@@ -1184,15 +1226,16 @@ def clear_stats():
     startButton.config(text="START")
 
 def reset_device():
-    if arduino:
-        print("resetting")
-        # time.sleep(0.1)
-        # arduino.setDTR(True)
-        # arduino.setRTS(True)
-        # arduino.dtr = True
-        arduino.close()
-    else:
-        print("not resetting")
+    print("resetting")
+    # if arduino:
+    #     print("resetting")
+    #     # time.sleep(0.1)
+    #     # arduino.setDTR(True)
+    #     # arduino.setRTS(True)
+    #     # arduino.dtr = True
+    #     arduino.close()
+    # else:
+    #     print("not resetting")
 
 
 def finish_up(crashed):
