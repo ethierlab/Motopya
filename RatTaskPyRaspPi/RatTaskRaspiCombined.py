@@ -19,11 +19,31 @@ import time
 import csv
 import os
 
+from ads1015_python import ads1015
+
+from ads1015 import ADS1015
+
+import smbus2
+
+bus = smbus2.SMBus(1)
+
+ads1015 = ADS1015()
+ads1015.set_mode("single")
+ads1015.set_programmable_gain(2.048)
+ads1015.set_sample_rate(1600)
+
+channels = ["in0/ref", "in1/ref","in2/ref"]
+
+reference = ads1015.get_reference_voltage()
+
 
 
 import time
 import threading
 import numpy as np
+
+import smbus2
+
 
 
 serialBuffer = ""
@@ -151,20 +171,26 @@ def get_bool_mean(bools):
     return np.mean(bools)
 
 def record_current_value():
-    global trial_time, peak_moduleValue
+    global trial_time, peak_moduleValue, max
+    if not max:
+        del max
     trial_time = session_t - trial_start_time
     values = [trial_time, moduleValue_now]
     if len(trial_value_buffer) >= lenBuffer:
         send_trial_data_to_python(False)
         trial_value_buffer.clear()
     trial_value_buffer.append(values)
+    if (moduleValue_now > peak_moduleValue):
+        print(moduleValue_now)
     peak_moduleValue = max(peak_moduleValue, moduleValue_now)
 
 def state_machine():
     global session_t, session_t_before, moduleValue_before, moduleValue_now, trial_started
     global CURRENT_STATE, NEXT_STATE, num_trials, success, stop_session
     global peak_moduleValue, trial_time, trial_end_time, trial_value_buffer, pause_session, pause_time
-
+    global loop_timer, trial_start_time, hit_thresh, hold_time, hold_timer, min, num_rewards, num_pellets
+    if not min:
+        del min
     if pause_session:
         pause_time += time.time() - pause_timer
         pause_timer = time.time()
@@ -180,7 +206,8 @@ def state_machine():
 
     moduleValue_before = moduleValue_now
     if input_type:
-        moduleValue_now = read_analog(AnalogIN) * lever_gain
+#         moduleValue_now = read_analog(AnalogIN) * lever_gain
+        moduleValue_now = ads1015.get_compensated_voltage(channel=channels[0], reference_voltage = reference) * lever_gain
     else:
         moduleValue_now = moduleValue_encoder
 
@@ -340,53 +367,47 @@ def read_analog(channel):
 
 def send_trial_data_to_python(done):
     global trial_value_buffer, success, trial_hit_thresh, trial_hold_time
-    trial_data = {
-        "trial_end": trial_end,
-        "success": success,
-        "trial_hit_thresh": trial_hit_thresh,
-        "trial_hold_time": trial_hold_time,
-        "data": trial_value_buffer
-    }
-    print(trial_data)  # Replace with actual data sending mechanism.
+    global num_trials, trial_start_time, init_thresh, hit_thresh, hold_time, trial_end_time
+    global success, peak_moduleValue, num_pellets, num_rewards, trial_hold_time, trial_hit_thresh
     global serialBuffer, sending
     sending = True
     dataDelimiter = "trialData"
-    serialBuffer.append(dataDelimiter)
+    serialBuffer += dataDelimiter
     for i in range(len(trial_value_buffer)):
         # detachInterrupts();
-        serialBuffer.append(trial_value_buffer[i][0])
-        serialBuffer.append("/")
-        serialBuffer.append(trial_value_buffer[i][1])
-        serialBuffer.append(";")
+        serialBuffer += str(trial_value_buffer[i][0])
+        serialBuffer += str("/")
+        serialBuffer += str(trial_value_buffer[i][1])
+        serialBuffer += str(";")
         # attachInterrupts();
     # detachInterrupts();
-    serialBuffer.append("nt")
-    serialBuffer.append(num_trials)
-    serialBuffer.append(";")
-    serialBuffer.append(trial_start_time)
-    serialBuffer.append(";")
-    serialBuffer.append(init_thresh)
-    serialBuffer.append(";")
-    serialBuffer.append(hold_time)
-    serialBuffer.append(";")
-    serialBuffer.append(hit_thresh)
-    serialBuffer.append(";")
-    serialBuffer.append(trial_end_time)
-    serialBuffer.append(";")
-    serialBuffer.append(success)
-    serialBuffer.append(";")
-    serialBuffer.append(peak_moduleValue)
-    serialBuffer.append(";")
-    serialBuffer.append(num_pellets)
-    serialBuffer.append(";")
-    serialBuffer.append(num_rewards)
-    serialBuffer.append(";")
-    serialBuffer.append(trial_hold_time)
-    serialBuffer.append(";")
-    serialBuffer.append(trial_hit_thresh)
+    serialBuffer += str("nt")
+    serialBuffer += str(num_trials)
+    serialBuffer += str(";")
+    serialBuffer += str(trial_start_time)
+    serialBuffer += str(";")
+    serialBuffer += str(init_thresh)
+    serialBuffer += str(";")
+    serialBuffer += str(hold_time)
+    serialBuffer += str(";")
+    serialBuffer += str(hit_thresh)
+    serialBuffer += str(";")
+    serialBuffer += str(trial_end_time)
+    serialBuffer += str(";")
+    serialBuffer += str(success)
+    serialBuffer += str(";")
+    serialBuffer += str(peak_moduleValue)
+    serialBuffer += str(";")
+    serialBuffer += str(num_pellets)
+    serialBuffer += str(";")
+    serialBuffer += str(num_rewards)
+    serialBuffer += str(";")
+    serialBuffer += str(trial_hold_time)
+    serialBuffer += str(";")
+    serialBuffer += str(trial_hit_thresh)
     if (not done):
-        serialBuffer.append("partialEnd");
-    serialBuffer.append("fin\n");
+        serialBuffer += str("partialEnd");
+    serialBuffer += str("fin\r\n");
     
     sending = False;
     # attachInterrupts();
@@ -431,8 +452,8 @@ def experimentOn():
         
             
 
-# Example main loop, replace with appropriate execution mechanism
 def main_loop():
+    print("in thread")
     global initTrial
     global init_thresh
     global baselineTrial
@@ -452,55 +473,58 @@ def main_loop():
     global input_type
     global stop_session
     global serialCommand
+    global serial_command
     while True:
-        while not stop_session:
-            first = serialCommand[0]
-            if first == "w":
-                i = 0
-            elif first == "p":
-                send_message("received parameters");
-                variables = serialCommand.substring(1).c_str();
-                serialCommand = "";
-                parts = variables.split(";");
-                initTrial = float(parts[0]);
-                init_thresh = int(parts[0]);
-                baselineTrial = float(parts[1]);
-                duration = float(parts[2]);
-                hit_window = float(parts[3]);
-                hit_thresh =float(parts[4]);
-                adapt_hit_thresh = bool(parts[5]);
-                hit_thresh_min = float(parts[6]);
-                hit_thresh_max = float(parts[7]);
-                lever_gain =float(parts[8]);
-                failure_tolerance =float(parts[9]);
-                MaxTrialNum =float(parts[10]);
-                hold_time =float(parts[11]) * 1000;
-                adapt_hold_time= bool(parts[12]);
-                hold_time_min = float(parts[13]) * 1000;
-                hold_time_max = float(parts[14]) * 1000;
-                input_type = bool(parts[17]);
+        if serialCommand == "":
+            continue
+        first = serialCommand[0]
+        if first == "w":
+            i = 0
+        elif first == "p":
+            send_message("received parameters");
+            variables = serialCommand[1:];
+            serialCommand = "";
+            parts = variables.split(";");
+            initTrial = float(parts[0]);
+            init_thresh = int(parts[0]);
+            baselineTrial = float(parts[1]);
+            duration = float(parts[2]);
+            hit_window = float(parts[3]);
+            hit_thresh =float(parts[4]);
+            adapt_hit_thresh = bool(parts[5]);
+            hit_thresh_min = float(parts[6]);
+            hit_thresh_max = float(parts[7]);
+            lever_gain =float(parts[8]);
+            failure_tolerance =float(parts[9]);
+            MaxTrialNum =float(parts[10]);
+            hold_time =float(parts[11]) * 1000;
+            adapt_hold_time= bool(parts[12]);
+            hold_time_min = float(parts[13]) * 1000;
+            hold_time_max = float(parts[14]) * 1000;
+            input_type = bool(parts[17]);
 
-                # if(input_type) {
-                # detachInterrupt(digitalPinToInterrupt(pinA));
-                # detachInterrupt(digitalPinToInterrupt(pinB));
-                # send_message("input_type true");
-                # }
-                # else {
-                # attachInterrupt(digitalPinToInterrupt(pinA), updateEncoderValue, CHANGE);
-                # attachInterrupt(digitalPinToInterrupt(pinB), updateEncoderValue, CHANGE);
-                # send_message("input_type false");
-                # }
-            elif first == "s":
-                send_message("received start")
-                experimentOn()
-            elif first == "a":
-                send_message("received stop")
-                stop_session = True
-            time.sleep(0.01)  # Simulate loop delay
+            # if(input_type) {
+            # detachInterrupt(digitalPinToInterrupt(pinA));
+            # detachInterrupt(digitalPinToInterrupt(pinB));
+            # send_message("input_type true");
+            # }
+            # else {
+            # attachInterrupt(digitalPinToInterrupt(pinA), updateEncoderValue, CHANGE);
+            # attachInterrupt(digitalPinToInterrupt(pinB), updateEncoderValue, CHANGE);
+            # send_message("input_type false");
+            # }
+        elif first == "s":
+            send_message("received start")
+            experimentOn()
+        elif first == "a":
+            send_message("received stop")
+            stop_session = True
+        time.sleep(0.01)  # Simulate loop delay
 
-if __name__ == "__main__":
-    main_thread = threading.Thread(target=main_loop)
-    main_thread.start()
+print("starting thread")
+main_thread = threading.Thread(target=main_loop)
+#     second_thread = threading.Thread(target=
+main_thread.start()
 
 
 
@@ -602,11 +626,13 @@ def connectArduino():
 
 # Boutons de contrôle____________________________________________________________
 def sendArduino(text):
+    global serialCommand
     cmd = text + '\r'
     try:
 #         arduino.write(cmd.encode())
 #         arduino.reset_output_buffer()
-        serial_command = text
+        serialCommand = text
+        print(serialCommand)
         return True
     except serial.SerialException:
         print("Device not connected.")
@@ -643,6 +669,7 @@ def readArduinoLine():
     global dataDeque
     global timeDeque
     global num_trials, num_pellets, num_rewards
+    global serialBuffer
 #     output = arduino.readline()
 #     output = str(output, 'utf-8') 
     output = serialBuffer
@@ -652,8 +679,8 @@ def readArduinoLine():
         output = output.removeprefix("message")
         output = output.removesuffix("fin\r\n")
         stateList.append(output)    
-        print("*\n*")
-        print(stateList[-100:])
+#         print("*\n*")
+#         print(stateList[-100:])
         if ("done" in output):
             stop_Button()
         return False, np.zeros(0), np.zeros(0)
@@ -669,7 +696,7 @@ def readArduinoLine():
         # data = output.split(";nt", 1)
         data = output.split("nt", 1)
         trial_data = data[0].split(";")
-        print(len(trial_data))
+#         print(len(trial_data))
         # dataDeque = deque([0] * buffer_size, maxlen=buffer_size)
         # timeDeque = deque([0] * buffer_size, maxlen=buffer_size) 
         for pair in trial_data:
@@ -691,14 +718,14 @@ def readArduinoLine():
                     print("pair : " + str(pair))
                     print(e)
                     continue
-        print("\n")
+#         print("\n")
 
         
-        zipped = list(zip(timeDeque, dataDeque))
-        for item in range(len(zipped)):
-            if (float(zipped[item][0]) > 10000):
-                print(str(item) + str(zipped[item]), end = " ")
-        print("x")
+#         zipped = list(zip(timeDeque, dataDeque))
+#         for item in range(len(zipped)):
+#             if (float(zipped[item][0]) > 10000):
+#                 print(str(item) + str(zipped[item]), end = " ")
+#         print("x")
         
         
 # Iterate over the zipped object
@@ -708,11 +735,11 @@ def readArduinoLine():
 
         if partial:
             pieces += 1
-            print("PARTIAL SPLIT")
+#             print("PARTIAL SPLIT")
             return False, np.zeros(0), np.zeros(0)
         
         pieces += 1
-        print("pieces" + str(pieces))
+#         print("pieces" + str(pieces))
         pieces = 0
         # dataDeque = deque([0], maxlen=buffer_size)
         # timeDeque = deque([0] * buffer_size, maxlen=buffer_size) 
@@ -937,6 +964,7 @@ start_time = None
 
 def start():
     # Déclenche la session comportement
+    print("starting")
     global session_running
     global session
     global max_force
