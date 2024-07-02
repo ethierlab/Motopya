@@ -562,6 +562,9 @@ void send_message(const String& message) {
 
 void feed() {
   num_pellets ++;
+  digitalWrite(10, LOW);
+  delay(5);
+  digitalWrite(10, HIGH);
 }
 
 void updateEncoderValue() {
@@ -704,6 +707,8 @@ void setup() {
   pinMode(pinA, INPUT);// Internal pull-up resistor for switch A
   pinMode(pinB, INPUT);// Internal pull-up resistor for switch B
   pinMode(8, OUTPUT); // Sound output
+  pinMode(10, OUTPUT); //Pellet feeder
+  digitalWrite(10, HIGH);
 
   SerialUSB.begin(115200);      // baud rate
   startArduinoProg = millis();  // début programme
