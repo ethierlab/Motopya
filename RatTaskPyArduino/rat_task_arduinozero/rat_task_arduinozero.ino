@@ -19,9 +19,9 @@ const int pinA = 2;  // A output
 const int pinB = 3;  // B output
 String serialCommand = "wait";
 
-int init_sound       = 400;  // 4kHz
-int reward_sound     = 1000; // 10kHz
-int failure_sound    = 100;  // 1kHz
+int init_sound       = 4000;  // 4kHz
+int reward_sound     = 10000; // 10kHz
+int failure_sound    = 1000;  // 1kHz
 
 
 int initial;
