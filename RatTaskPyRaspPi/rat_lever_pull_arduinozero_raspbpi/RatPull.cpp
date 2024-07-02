@@ -12,6 +12,7 @@
 
 #include <iostream>
 #include <wiringPi.h>
+#include <wiringPiI2C.h>
 #include <wiringSerial.h>
 #include <unistd.h>
 
@@ -40,6 +41,11 @@ int sum = 0;
 int encoderPos = 0;
 
 int serialFd = 0;
+int analog_fd = 0;
+
+const int ADS1015_I2C_ADDR = 0x48;
+const int ADS1015_CONFIG_REG= 0x01;
+const int ADS1015_CONVERSION_REG = 0x00;
 
 
 // code controllers
@@ -225,7 +231,14 @@ void stateMachine() {
   //% read module force
    moduleValue_before = moduleValue_now;    // store previous value
   if (input_type) {
-    moduleValue_now = analogRead(AnalogIN) * lever_gain;  // update current value
+    //moduleValue_now = analogRead(AnalogIN) * lever_gain;  // update current value
+    cout << "Getting module value" << endl;
+    moduleValue_now = wiringPiI2CReadReg16(analog_fd, ADS1015_CONVERSION_REG);
+    //moduleValue_now = wiringPiI2CRead(analog_fd);
+    cout << moduleValue_now << endl;
+    if (moduleValue_now < 0) {
+        std::cerr << "Error reading from ADS1015." << endl;
+    }
   }
   else {
     moduleValue_now = moduleValue_encoder;
@@ -759,6 +772,18 @@ int main() {
         std::cerr << "WiringPi setup failed" << std::endl;
         return 1;
   }
+  analog_fd = wiringPiI2CSetup(ADS1015_I2C_ADDR);
+  
+  if (analog_fd == -1) {
+    std::cerr << "Failed to initalize ADS1015 I2C connection." << std::endl;
+    return 1;
+  }
+  
+  uint16_t config = 0x83C3; // +/- 2.048V range, continuous conversion mode
+  
+  wiringPiI2CWriteReg16(analog_fd, ADS1015_CONFIG_REG, config);
+  
+  
   //serialFd = serialOpen("/dev/ttyAMA0", 115200); //baud rate
   serialFd = serialOpen("/dev/pts/3", 115200); //baud rate
   if (serialFd == -1) {
@@ -791,6 +816,7 @@ int main() {
     //std::cout << serialCommand << std::endl;
     if (!serialCommand.empty()) {
             empty_stated = true;
+            cout << " Received: " << serialCommand << endl;
             switch (serialCommand[0]) {  // Première lettre de la commande
               case 'w':  // boucle defaut standby
                 break;

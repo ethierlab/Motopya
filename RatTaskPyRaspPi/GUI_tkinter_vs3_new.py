@@ -91,7 +91,7 @@ def connectArduino():
             description = port.description
             print(description)
             port_found = port.device
-    port_found = "/dev/pts/4"
+    port_found = "/dev/pts/1"
     description = "the raspberry pi"
     if port_found == None:
         print("Arduino not found")
