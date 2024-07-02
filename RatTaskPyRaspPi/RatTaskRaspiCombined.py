@@ -403,11 +403,13 @@ def main_loop():
     global hold_time_min
     global hold_time_max
     global input_type
+    global stop_session
+    global serialCommand
     while True:
         while not stop_session:
             first = serialCommand[0]
             if first == "w":
-                print("w")
+                i = 0
             elif first == "p":
                 send_message("received parameters");
                 variables = serialCommand.substring(1).c_str();
@@ -504,59 +506,60 @@ def testConnection():
         return False
 
 def connectArduino():
-    global arduino
-    global connected
-    clear_stats()
-    ports = serial.tools.list_ports.comports()
-    port_found = None
-    for port in ports:
-        print("Port:", port.device)
-        print("Description:", port.description)
-        print("Hardware ID:", port.hwid)
-        print("Manufacturer:", port.manufacturer)
-        print("Product:", port.product)
-        print("Serial Number:", port.serial_number)
-        print("===================================")
-        if (not port.description):
-            port.description = ""
-        if (not port.manufacturer):
-            port.manufacturer = ""
-        if "tty" in port.description.lower() or "tty" in port.manufacturer.lower() or "tty" in port.device.lower():
-            print(port.description.lower())
-            description = port.description
-            print(description)
-            port_found = port.device
-    port_found = "/dev/pts/4"
-    description = "the raspberry pi"
-    if port_found == None:
-        print("Arduino not found")
-        lamp.turn_off()
-        return
-    else:
-        print(f"Arduino found at port {port_found} in description {description}")
-        lamp.turn_on()
+#     global arduino
+#     global connected
+#     clear_stats()
+#     ports = serial.tools.list_ports.comports()
+#     port_found = None
+#     for port in ports:
+#         print("Port:", port.device)
+#         print("Description:", port.description)
+#         print("Hardware ID:", port.hwid)
+#         print("Manufacturer:", port.manufacturer)
+#         print("Product:", port.product)
+#         print("Serial Number:", port.serial_number)
+#         print("===================================")
+#         if (not port.description):
+#             port.description = ""
+#         if (not port.manufacturer):
+#             port.manufacturer = ""
+#         if "tty" in port.description.lower() or "tty" in port.manufacturer.lower() or "tty" in port.device.lower():
+#             print(port.description.lower())
+#             description = port.description
+#             print(description)
+#             port_found = port.device
+#     port_found = "/dev/pts/4"
+#     description = "the raspberry pi"
+#     if port_found == None:
+#         print("Arduino not found")
+#         lamp.turn_off()
+#         return
+#     else:
+#         print(f"Arduino found at port {port_found} in description {description}")
+#         lamp.turn_on()
         
 
     
     # Serial communication
-    if arduino:
-        arduino.close()
-    arduino = serial.Serial(port_found, 115211)
-    t.sleep(1)
-    arduino.flushInput()  # vide le buffer en provenance de l'arduino
-    connected = True
-
-    testConnection()
-
-    entry_changed()
+#     if arduino:
+#         arduino.close()
+#     arduino = serial.Serial(port_found, 115211)
+#     t.sleep(1)
+#     arduino.flushInput()  # vide le buffer en provenance de l'arduino
+#     connected = True
+# 
+#     testConnection()
+# 
+#     entry_changed()
         
 
 # Boutons de contrôle____________________________________________________________
 def sendArduino(text):
     cmd = text + '\r'
     try:
-        arduino.write(cmd.encode())
-        arduino.reset_output_buffer()
+#         arduino.write(cmd.encode())
+#         arduino.reset_output_buffer()
+        serial_command = text
         return True
     except serial.SerialException:
         print("Device not connected.")
@@ -602,8 +605,8 @@ def readArduinoLine():
     global dataDeque
     global timeDeque
     global num_trials, num_pellets, num_rewards
-    output = arduino.readline()
-    output = str(output, 'utf-8')
+#     output = arduino.readline()
+#     output = str(output, 'utf-8') 
     print(output)
     if ("message" in output and "fin\r\n" in output):
         output = output.removeprefix("message")
