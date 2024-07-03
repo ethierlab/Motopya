@@ -46,7 +46,8 @@ import smbus2
 
 
 
-serialBuffer = ""
+serialBuffer = []
+serialMessageBuffer = []
 
 # SETTINGS
 AnalogIN = 0
@@ -70,9 +71,9 @@ lenBuffer = 250
 # STATE MACHINE VARIABLES
 initTrial = 0
 baselineTrial = 0
-startArduinoProg = time.time()
-startSession = time.time()
-startTrial = time.time()
+startArduinoProg = time.time() * 1000
+startSession = time.time() * 1000
+startTrial = time.time() * 1000
 bufferTimeFreq = 0
 stopTrial = 0
 LastTime = 0
@@ -115,16 +116,16 @@ moduleValue_encoder = 0
 peak_moduleValue = 0
 
 # TIMERS
-hold_timer = time.time()
-it_timer = time.time()
+hold_timer = 0
+it_timer = 0
 session_t = 0
 session_t_before = 0
 trial_start_time = 0
 trial_end_time = 0
 trial_time = 0
-pause_timer = time.time()
-loop_timer = time.time()
-experiment_start = time.time()
+pause_timer = 0
+loop_timer = 0
+experiment_start = time.time() * 1000
 pause_time = 0
 
 # BUFFERS
@@ -162,7 +163,7 @@ NEXT_STATE = CURRENT_STATE
 # FUNCTIONS ---------------------------------
 
 def get_timer_duration(start):
-    return time.time() - start
+    return time.time() * 1000 - experiment_start - start
 
 def get_mean(numbers):
     return np.mean(numbers)
@@ -188,21 +189,22 @@ def state_machine():
     global session_t, session_t_before, moduleValue_before, moduleValue_now, trial_started
     global CURRENT_STATE, NEXT_STATE, num_trials, success, stop_session
     global peak_moduleValue, trial_time, trial_end_time, trial_value_buffer, pause_session, pause_time
-    global loop_timer, trial_start_time, hit_thresh, hold_time, hold_timer, min, num_rewards, num_pellets
+    global loop_timer, trial_start_time, hit_thresh, hold_time, hold_timer, min, num_rewards
+    global num_pellets, it_timer
     if not min:
         del min
     if pause_session:
-        pause_time += time.time() - pause_timer
-        pause_timer = time.time()
+        pause_time += time.time() * 1000 - experiment_start - pause_timer
+        pause_timer = time.time() * 1000 - experiment_start
         return
 
-    loop_time = time.time() - loop_timer
-    if loop_time - pause_time > 0.1:
-        send_message("--- WARNING --- long delay in while loop")
-    loop_timer = time.time()
+    loop_time = time.time() * 1000 - experiment_start - loop_timer
+    if loop_time - pause_time > 100:
+        send_message("--- WARNING --- long delay in while loop" + str(loop_time))
+    loop_timer = time.time() * 1000 - experiment_start
 
     session_t_before = session_t
-    session_t = time.time() - experiment_start - pause_time
+    session_t = (time.time() * 1000 - experiment_start - pause_time)
 
     moduleValue_before = moduleValue_now
     if input_type:
@@ -222,7 +224,7 @@ def state_machine():
         record_current_value()
 
     if CURRENT_STATE == STATE_IDLE:
-        if session_t > duration * 60:
+        if session_t > duration * 60 :
             send_message('Time Out')
             NEXT_STATE = STATE_SESSION_END
         elif num_trials >= MaxTrialNum:
@@ -237,6 +239,7 @@ def state_machine():
             play(500, init_sound)
 
     elif CURRENT_STATE == STATE_TRIAL_INIT:
+#         print("INIT")
         trial_started = True
         num_trials += 1
 
@@ -249,22 +252,27 @@ def state_machine():
         NEXT_STATE = STATE_TRIAL_STARTED
 
     elif CURRENT_STATE == STATE_TRIAL_STARTED:
-        if trial_time > hit_window and moduleValue_now < hit_thresh:
+        print("STARTED, module value: " + str(moduleValue_now))
+        if trial_time > hit_window * 1000 and moduleValue_now < hit_thresh:
+            print("trial_time > hit_window and moduleValue_now < hit_thresh" + str(trial_time) + " > " + str(hit_window))
             NEXT_STATE = STATE_FAILURE
         elif moduleValue_now <= peak_moduleValue - failure_tolerance:
+            print("moduleValue_now <= peak_moduleValue - failure_tolerance")
             NEXT_STATE = STATE_FAILURE
         elif moduleValue_now >= hit_thresh:
-            hold_timer = time.time()
+            hold_timer = time.time() * 1000 - experiment_start
             NEXT_STATE = STATE_HOLD
 
     elif CURRENT_STATE == STATE_HOLD:
+        print("HOLD")
         if moduleValue_now < hit_thresh:
-            hold_timer = time.time()
+            hold_timer = time.time() * 1000 - experiment_start
             NEXT_STATE = STATE_TRIAL_STARTED
         elif get_timer_duration(hold_timer) >= hold_time:
             NEXT_STATE = STATE_SUCCESS
 
     elif CURRENT_STATE == STATE_SUCCESS:
+        print("SUCCESS")
         trial_hit_thresh = hit_thresh
         trial_hold_time = hold_time
         send_message("STATE_SUCCESS")
@@ -291,6 +299,7 @@ def state_machine():
         NEXT_STATE = STATE_POST_TRIAL
 
     elif CURRENT_STATE == STATE_FAILURE:
+        print("FAILURE")
         trial_hit_thresh = hit_thresh
         trial_hold_time = hold_time
         send_message("STATE_FAILURE")
@@ -315,10 +324,16 @@ def state_machine():
         NEXT_STATE = STATE_POST_TRIAL
 
     elif CURRENT_STATE == STATE_POST_TRIAL:
+        print("POST_TRIAL")
         if trial_time - trial_end_time >= post_trial_dur:
             NEXT_STATE = STATE_PARAM_UPDATE
+        else:
+            print("trial_time : " + str(trial_time) + "\ntrial_end_time : " +
+                  str(trial_end_time) + "\ntime - end_time = : " + str(trial_time - trial_end_time)
+                  + "\npost_trial_dur : " + str(post_trial_dur))
 
     elif CURRENT_STATE == STATE_PARAM_UPDATE:
+        print("UPDATE")
         send_message("STATE_PARAM_UPDATE")
         send_trial_data_to_python(True)
         trial_started = False
@@ -326,18 +341,20 @@ def state_machine():
         peak_moduleValue = 0
         success = False
 
-        it_timer = time.time()
+        it_timer = time.time() * 1000 - experiment_start
         NEXT_STATE = STATE_INTER_TRIAL
 
     elif CURRENT_STATE == STATE_INTER_TRIAL:
+        print("INTER")
         if get_timer_duration(it_timer) >= inter_trial_dur:
-            it_timer = time.time()
+            it_timer = time.time() * 1000 - experiment_start
             NEXT_STATE = STATE_IDLE
 
     elif CURRENT_STATE == STATE_SESSION_END:
-        send_message(str(time.time()))
+        print("SESSION_END")
+        send_message(str(time.time() * 1000 - experiment_start))
         send_message("done")
-        send_message("STATE_SESSION_END")
+#         send_message("STATE_SESSION_END")
 
         serialCommand = "e"
         reinitialize()
@@ -357,7 +374,7 @@ def play(milliseconds, freq):
     send_message("in play func")
     if time.time() - prev_tone > 0.2:
         send_message("can play")
-        prev_tone = time.time()
+        prev_tone = time.time() * 1000 - experiment_start
         threading.Timer(milliseconds / 1000, send_message, args=(freq,)).start()
 
 def read_analog(channel):
@@ -371,43 +388,42 @@ def send_trial_data_to_python(done):
     global success, peak_moduleValue, num_pellets, num_rewards, trial_hold_time, trial_hit_thresh
     global serialBuffer, sending
     sending = True
-    dataDelimiter = "trialData"
-    serialBuffer += dataDelimiter
+    addition = ""
     for i in range(len(trial_value_buffer)):
         # detachInterrupts();
-        serialBuffer += str(trial_value_buffer[i][0])
-        serialBuffer += str("/")
-        serialBuffer += str(trial_value_buffer[i][1])
-        serialBuffer += str(";")
+        addition += str(trial_value_buffer[i][0])
+        addition += str("/")
+        addition += str(trial_value_buffer[i][1])
+        addition += str(";")
         # attachInterrupts();
     # detachInterrupts();
-    serialBuffer += str("nt")
-    serialBuffer += str(num_trials)
-    serialBuffer += str(";")
-    serialBuffer += str(trial_start_time)
-    serialBuffer += str(";")
-    serialBuffer += str(init_thresh)
-    serialBuffer += str(";")
-    serialBuffer += str(hold_time)
-    serialBuffer += str(";")
-    serialBuffer += str(hit_thresh)
-    serialBuffer += str(";")
-    serialBuffer += str(trial_end_time)
-    serialBuffer += str(";")
-    serialBuffer += str(success)
-    serialBuffer += str(";")
-    serialBuffer += str(peak_moduleValue)
-    serialBuffer += str(";")
-    serialBuffer += str(num_pellets)
-    serialBuffer += str(";")
-    serialBuffer += str(num_rewards)
-    serialBuffer += str(";")
-    serialBuffer += str(trial_hold_time)
-    serialBuffer += str(";")
-    serialBuffer += str(trial_hit_thresh)
+    addition += str("nt")
+    addition += str(num_trials)
+    addition += str(";")
+    addition += str(trial_start_time)
+    addition += str(";")
+    addition += str(init_thresh)
+    addition += str(";")
+    addition += str(hold_time)
+    addition += str(";")
+    addition += str(hit_thresh)
+    addition += str(";")
+    addition += str(trial_end_time)
+    addition += str(";")
+    addition += str(success)
+    addition += str(";")
+    addition += str(peak_moduleValue)
+    addition += str(";")
+    addition += str(num_pellets)
+    addition += str(";")
+    addition += str(num_rewards)
+    addition += str(";")
+    addition += str(trial_hold_time)
+    addition += str(";")
+    addition += str(trial_hit_thresh)
     if (not done):
-        serialBuffer += str("partialEnd");
-    serialBuffer += str("fin\r\n");
+        addition += str("partialEnd");
+    serialBuffer.append(addition)
     
     sending = False;
     # attachInterrupts();
@@ -415,16 +431,18 @@ def send_trial_data_to_python(done):
     # code de fin d'envoi de données
 
 def send_message(msg):
-    print(msg)  # Replace with actual message sending mechanism.
+    global serialMessageBuffer
+    serialMessageBuffer.append(str(msg))
 
 def reinitialize():
-    global num_trials, num_pellets, num_rewards, initTrial, baselineTrial, trial_started
+    global num_trials, num_pellets, num_rewards, initTrial, baselineTrial, trial_started, experiment_start
     num_trials = 0
     num_pellets = 0
     num_rewards = 0
     initTrial = 0
     baselineTrial = 0
     trial_started = False
+    experiment_start = time.time() * 1000
     # Reset other necessary variables.
 
 def experimentOn():
@@ -437,7 +455,7 @@ def experimentOn():
             serialCommand = "s"
         elif serialCommand[0] == "c":
             if not pause_session:
-                pause_timer = time.time()
+                pause_timer = time.time() * 1000 - experiment_start
             else:
                 send_message("pause time")
                 send_message(pause_time)
@@ -488,7 +506,7 @@ def main_loop():
             initTrial = float(parts[0]);
             init_thresh = int(parts[0]);
             baselineTrial = float(parts[1]);
-            duration = float(parts[2]);
+            duration = float(parts[2]) * 1000;
             hit_window = float(parts[3]);
             hit_thresh =float(parts[4]);
             adapt_hit_thresh = bool(parts[5]);
@@ -669,31 +687,31 @@ def readArduinoLine():
     global dataDeque
     global timeDeque
     global num_trials, num_pellets, num_rewards
-    global serialBuffer
+    global serialBuffer, serialMessageBuffer
 #     output = arduino.readline()
 #     output = str(output, 'utf-8') 
-    output = serialBuffer
-    serialBuffer = ""
-    print(output)
-    if ("message" in output and "fin\r\n" in output):
-        output = output.removeprefix("message")
-        output = output.removesuffix("fin\r\n")
-        stateList.append(output)    
+    if (len(serialMessageBuffer) > 0):
+        new_output = serialMessageBuffer[0]
+        serialMessageBuffer.pop(0)
+        stateList.append(new_output)    
 #         print("*\n*")
 #         print(stateList[-100:])
-        if ("done" in output):
+        if ("done" in new_output):
             stop_Button()
         return False, np.zeros(0), np.zeros(0)
-    elif ("trialData" in output and "fin\r\n" in output):
+    if (len(serialBuffer) > 0):
+        print("got trial data")
         partial = False
-        output = output.removesuffix('fin\r\n')  # input en 'string'. Each arduino value is separated by ';'
-        output = output.removeprefix('trialData')
+        output = serialBuffer[0]
+        serialBuffer.pop(0)
+        
 
         if ("partialEnd" in output):
             partial = True
             pieces += 1
             output = output.removesuffix('partialEnd')  # input en 'string'. Each arduino value is separated by ';'
         # data = output.split(";nt", 1)
+#         print(output)
         data = output.split("nt", 1)
         trial_data = data[0].split(";")
 #         print(len(trial_data))
@@ -726,17 +744,16 @@ def readArduinoLine():
 #             if (float(zipped[item][0]) > 10000):
 #                 print(str(item) + str(zipped[item]), end = " ")
 #         print("x")
-        
-        
-# Iterate over the zipped object
 
         dataArray = np.array(dataDeque).astype(float) 
         timeArray = np.array(timeDeque).astype(float)
 
         if partial:
             pieces += 1
-#             print("PARTIAL SPLIT")
+            print("PARTIAL SPLIT")
             return False, np.zeros(0), np.zeros(0)
+        else:
+            print("FULL")
         
         pieces += 1
 #         print("pieces" + str(pieces))
@@ -752,25 +769,25 @@ def readArduinoLine():
     
         trial_numbers = data[1].split(";")
         num_trials = int(trial_numbers[0])
-        trial_start_time = int(trial_numbers[1])
+        trial_start_time = int(float(trial_numbers[1]) / 1000)
         
         init_thresh = int(trial_numbers[2])
-        hold_time = int(trial_numbers[3])
+        hold_time = int(float(trial_numbers[3]))
         parameters["holdTime"].set(str(float(trial_numbers[3]) / 1000))
 
-        hit_thresh = int(trial_numbers[4])
-        parameters["hitThresh"].set(str(int(trial_numbers[4])))
-        trial_end_time = int(trial_numbers[5])
-        success = int(trial_numbers[6])
+        hit_thresh = int(float(trial_numbers[4]))
+        parameters["hitThresh"].set(str(int(float(trial_numbers[4]))))
+        trial_end_time = int(float(trial_numbers[5]))
+        success = bool(trial_numbers[6])
         if success:
             display("Success")
         else:
             display("Failed")
-        peak_moduleValue = int(trial_numbers[7])
+        peak_moduleValue = int(float(trial_numbers[7]))
         num_pellets = int(trial_numbers[8])
         num_rewards = int(trial_numbers[9])
-        trial_hold_time = int(trial_numbers[10])
-        trial_hit_thresh = int(trial_numbers[11])
+        trial_hold_time = int(float(trial_numbers[10]))
+        trial_hit_thresh = int(float(trial_numbers[11]))
 
         trial = {}
         trial["start_time"] = trial_start_time / 1000
@@ -968,6 +985,7 @@ def start():
     global session_running
     global session
     global max_force
+    global serialBuffer, serialMessageBuffer
     max_force = 0
     current_datetime = datetime.now()
     session["Start_time"] = current_datetime.strftime("%d-%B-%Y %H:%M:%S")
@@ -997,7 +1015,7 @@ def start():
             try:
                 # if arduino.inWaiting() > 1:
                 #     readArduinoInput()
-                if serialBuffer != "":
+                if len(serialBuffer) > 0 or len(serialMessageBuffer) > 0:
                     readArduinoInput()
                 top.update()
             except serial.SerialException:
