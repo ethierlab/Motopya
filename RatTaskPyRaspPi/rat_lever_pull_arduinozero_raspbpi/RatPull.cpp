@@ -778,6 +778,11 @@ int main() {
     std::cerr << "Failed to initalize ADS1015 I2C connection." << std::endl;
     return 1;
   }
+  else {
+    cout << "Successfully setup I2C" << endl;
+  }
+  
+  
   
   uint16_t config = 0x83C3; // +/- 2.048V range, continuous conversion mode
   

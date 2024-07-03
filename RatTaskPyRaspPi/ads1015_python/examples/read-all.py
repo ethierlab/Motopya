@@ -38,7 +38,7 @@ try:
             print("{}: {:6.3f}v".format(channel, value))
 
         print("")
-        time.sleep(0.5)
+        time.sleep(0.1)
 
 except KeyboardInterrupt:
     pass
