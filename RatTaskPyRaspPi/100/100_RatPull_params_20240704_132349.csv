@@ -2,14 +2,14 @@ iniThreshold,100
 iniBaseline,1
 minDuration,30
 hitWindow,2
-hitThresh,300
+hitThresh,296
 hitThreshAdapt,True
 hitThreshMin,50
 hitThreshMax,150
 leverGain,5
 forceDrop,1000
 maxTrials,100
-holdTime,0.66
+holdTime,0.62
 holdTimeAdapt,True
 holdTimeMin,0
 holdTimeMax,1

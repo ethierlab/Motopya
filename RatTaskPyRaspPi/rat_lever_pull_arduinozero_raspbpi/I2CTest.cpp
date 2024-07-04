@@ -6,6 +6,8 @@
 #include <unistd.h>
 #include <math.h>
 #include <bitset>
+#include <cstdlib>
+#include <thread>
 
 
 const int ADS1015_I2C_ADDR = 0x48;
@@ -14,8 +16,17 @@ const int ADS1015_CONVERSION_REG = 0x00;
 
 using namespace std;
 
+void runPythonScript(const std::string& scriptPath) {
+	string command = "python " + scriptPath;
+	system(command.c_str());
+}
+
 
 int main() {
+	
+	string path = "./read-all.py";
+	
+	thread pythonThread(runPythonScript, path);
 	// Initialize wiringPi library and serial port
   //SETUP
   while(true) {
@@ -24,7 +35,7 @@ int main() {
 		continue;
 		
 	 }
-	 int analog_fd = wiringPiI2CSetup(0x48);
+	 int analog_fd = wiringPiI2CSetup(ADS1015_I2C_ADDR);
 	  if (analog_fd == -1) {
 		std::cerr << "Failed to initalize ADS1015 I2C connection." << std::endl;
 		continue;
@@ -49,7 +60,6 @@ int main() {
 		  if (proper_number != 0) {
 			   cout << "proper number:  " << proper_number << endl;
 		  }
-			wiringPiI2CWriteReg8(analog_fd, 0x2D, 0b00001000);
 		  int moduleValue_now = wiringPiI2CReadReg16(analog_fd, ADS1015_CONVERSION_REG);
 		  int adc_value = moduleValue_now & 0xFFF;
 		  double value = ( (moduleValue_now  - adc_value )/ pow(2, 12)) + (adc_value * pow(2, 4));
@@ -58,16 +68,6 @@ int main() {
 			value += 4095;
 			}
 			value -= 4036;
-			
-			
-		  //if (moduleValue_now != 0) {
-			  //std::cout << moduleValue_now << std::endl;
-			  //cout << bits << endl;
-			 //}
-			//if (adc_value != 0) {
-			  //std::cout << adc_value << std::endl;
-			  //cout << bits << endl;
-			 //}
 			if (value != 0 && moduleValue_now !=0) {
 			  std::cout << value << std::endl;
 			  std::cout << before_value << std::endl;
