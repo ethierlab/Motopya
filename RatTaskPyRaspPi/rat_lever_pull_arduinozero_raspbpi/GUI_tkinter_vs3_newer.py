@@ -241,6 +241,12 @@ def readArduinoLine():
 
         dataArray = np.array(dataDeque).astype(float) 
         timeArray = np.array(timeDeque).astype(float)
+        
+        dataList = dataArray;
+        timeList = timeArray;
+        
+        dataList = dataList.tolist()
+        timeList = timeList.tolist()
 
         if partial:
             pieces += 1
@@ -285,7 +291,7 @@ def readArduinoLine():
         trial["start_time"] = trial_start_time / 1000
         trial["init_thresh"] = init_thresh
         trial["hit_thresh"] = trial_hit_thresh
-        trial["Force"] = list(zip(list(timeArray), list(dataArray)))
+        trial["Force"] = list(zip(list(timeList), list(dataList)))
         trial["hold_time"] = trial_hold_time
         trial["duration"] = trial_end_time / 1000
         trial["success"] = success

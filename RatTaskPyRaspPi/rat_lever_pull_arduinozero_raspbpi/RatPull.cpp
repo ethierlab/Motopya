@@ -103,6 +103,9 @@ bool adapt_hit_thresh;
 bool adapt_hold_time;
 bool adapt_drop_tolerance;
 
+
+int lowest_value = 0;
+
 // - lever values
 int moduleValue_before = 0;
 int moduleValue_now = 0;
@@ -139,6 +142,16 @@ bool isr_running = false;
 int post_trial_dur = 1000;
 int inter_trial_dur = 500;
 int buffer_dur = 1000;
+
+
+// python objects
+
+
+PyObject* sysPath = NULL;
+PyObject* pName = NULL;
+PyObject* pModule = NULL;
+PyObject* pFunc = NULL;
+PyObject* pValue = NULL;
 
 
 // Define STATES
@@ -210,122 +223,100 @@ void recordCurrentValue() {
     peak_moduleValue = max(peak_moduleValue, moduleValue_now);
 }
 
-double getPythonPimoroniValue() {
-  Py_Initialize();
-  
-  PyObject* sysPath = PySys_GetObject("path");
-  PyList_Append(sysPath, PyUnicode_DecodeFSDefault("."));
-  PyObject* pName = PyUnicode_DecodeFSDefault("getADCValue2");
-  //PyObject* pModule = PyImport_Import(pName);
-  PyObject* pModule = PyImport_ImportModule("getADCValue2");
-  Py_DECREF(pName);
-  string output = "0";
-  double value = 0;
-  
-  if (pModule != nullptr) {
-    cout << "Is a module" << endl; 
-      PyObject* pFunc = PyObject_GetAttrString(pModule, "getValue");
-      cout << "Is a here" << endl; 
-      if (pFunc && PyCallable_Check(pFunc)) {
-        cout << "Is a function" << endl; 
-        //PyObject* pArgs = PyTuple_Pack(2, PyLong_FromLong(2), PyLong_FromLong(3));
-        PyObject* pValue = PyObject_CallObject(pFunc, nullptr);
-        //Py_DECREF(nullptr);
-        value = PyLong_AsLong(pValue);
-        cout << "Result of value : " << value << endl;
-        if(pValue != nullptr) {
-          cout << pValue << " " << PyUnicode_AsUTF8(pValue) << endl;
-          cout << "Result of add : " << value << endl;
-          Py_DECREF(pValue);
-          
-        }
-        else {
-          PyErr_Print();
-          cerr << "Call to add() failed" << endl;
-        }
-        Py_DECREF(pFunc);
-        cout << "and here" << endl; 
-      }
-    else {
-      cout << "Not a func" << endl;
-    }
-    
-  }
-  else {
-   cout << "Not a module" << endl; 
-  }
-  Py_Finalize();
-  return value;
-  
-  //string scriptFile = "getADCValue.py";
-  //FILE* file = fopen(scriptFile.c_str(), "r");
-  //if (file == nullptr) {
-    //cerr << "Failed to open ads python file" << endl;
-    //return  -1;
-  //}
-  
-  //PyRun_SimpleFile(file, scriptFile.c_str());
-  //fclose(file);
-  
-  //PyObject* mainModule = PyImport_AddModule("__main__");
-  //PyObject* globalDict = PyModule_GetDict(mainModule);
-  //PyObject* result = PyDict_GetItemString(globalDict, "output_variable");
-  
-  //string output;
-  //if (result != nullptr) {
-    //output = PyUnicode_AsUTF8(result);
-  //}
-  //else {
-    //cerr << "Failed to retrieve output from Python script." << endl;
-  //}
-  
-  //Py_Finalize();
-  
-  return stod(output);
-}
 
+
+  
+  
 long tries = 0;
 long try_sum = 0;
 long highest = 0;
-void getCurrentValue() {
+double getPythonPimoroniValue() {
   long initial_time = millis();
+  double value = 0;
+    if (pFunc && PyCallable_Check(pFunc)) {
+      pValue = PyObject_CallObject(pFunc, nullptr);
+      value = PyFloat_AsDouble(pValue);
+      if(pValue != nullptr) {
+        //cout << "Result of add : " << value << endl;
+        Py_DECREF(pValue);
+      }
+      else {
+        PyErr_Print();
+        cerr << "Call to add() failed" << endl;
+      }
+      //Py_DECREF(pFunc); 
+    }
+    else {
+      cout << "Not callable func" << endl;
+      exit(0);
+    }
+  //Py_Finalize();
+  if (value * 100 < lowest_value) {
+   lowest_value = value * 100; 
+  }
+  //cout << "Lowest : " << lowest_value << endl;
+  //long final_time = millis();
+  //long timer1 = final_time - initial_time;
+  //try_sum += timer1;
+  //tries += 1;
+  //long average = (try_sum / tries);
+  //if (timer1 > highest) {
+    //highest = timer1;
+  //}
+  //cout << "Wait time : " << timer1 << endl <<  "Average wait time : " << average << " ms " << endl << "Highest : " << highest << " ms " << endl;
+  
+  return value * 100 - lowest_value;
+}
+
+#define ADS1015_REG_CONFIG 0x01
+
+#define ADS1015_CONFIG_OS_SINGLE 0x8000
+#define ADS1015_CONFIG_MUX_SINGLE_0 0x4000
+#define ADS1015_CONFIG_PGA_4_096V 0x0200
+#define ADS1015_CONFIG_MODE_SINGLE 0x0100
+#define ADS1015_CONFIG_DR_128SPS 0x00E0
+
+void getCurrentValue() {
+
   long other_value = 0;
   //while(true) {
+  
+  uint16_t config = ADS1015_CONFIG_OS_SINGLE | 
+  ADS1015_CONFIG_MUX_SINGLE_0 | 
+  ADS1015_CONFIG_PGA_4_096V | 
+  ADS1015_CONFIG_MODE_SINGLE | 
+  ADS1015_CONFIG_DR_128SPS;
+  
 
-      //bitset<16> bits;
-		  //bits =  wiringPiI2CReadReg16(analog_fd, ADS1015_CONVERSION_REG);
-		  //uint16_t bits2;
-		  //bits2 = static_cast<uint16_t>(bits.to_ulong());
-		  //uint8_t highByte = (bits2 >> 8) & 0xFF;
-		  //uint8_t lowByte = bits2 & 0xFF;
-		  //uint16_t value = (static_cast<uint16_t>(lowByte) << 8) | highByte;
-		  //value = value / pow(2, 4);
-		  //if (value < 200) {
-        //value += 4095;
-			//}
-			//value -= 4036;
-      //other_value = value * lever_gain;
-			//if (other_value !=0) {
-			  //std::cout << "Module value : " << moduleValue_now << std::endl;
-        //moduleValue_now = other_value;
-        //break;
-			 //}
-		  
-		  //if (moduleValue_now == -1) {
-			  //std::cout << "error -1" << std::endl;
-		  //}
-    //}
-    moduleValue_now = getPythonPimoroniValue();
-    long final_time = millis();
-    long timer1 = final_time - initial_time;
-    try_sum += timer1;
-    tries += 1;
-    long average = (try_sum / tries);
-    if (timer1 > highest) {
-      highest = timer1;
+    bitset<16> bits;
+    //wiringPiI2CWriteReg16(analog_fd, ADS1015_REG_CONFIG, configth);
+    delay(20);
+    bits =  wiringPiI2CReadReg16(analog_fd, ADS1015_CONVERSION_REG);
+    uint16_t bits2;
+    bits2 = static_cast<uint16_t>(bits.to_ulong());
+    uint8_t highByte = (bits2 >> 8) & 0xFF;
+    uint8_t lowByte = bits2 & 0xFF;
+    uint16_t value = (static_cast<uint16_t>(lowByte) << 8) | highByte;
+    value = value / pow(2, 4);
+    if (value < 200) {
+      value += 4095;
     }
-    cout << "Wait time : " << timer1 << endl <<  "Average wait time : " << average << " ms " << endl << "Highest : " << highest << " ms " << endl;
+    value -= 4036;
+    other_value = value * lever_gain;
+    if (other_value !=0) {
+      std::cout << "Module value : " << moduleValue_now << std::endl;
+      std::cout << "Bits : " << bits << std::endl;
+      moduleValue_now = other_value;
+      //break;
+      return;
+     }
     
+    if (moduleValue_now == -1) {
+      std::cout << "error -1" << std::endl;
+    }
+    ////}
+    //moduleValue_now = getPythonPimoroniValue();
+
 }
 
 
@@ -356,10 +347,9 @@ void stateMachine() {
    moduleValue_before = moduleValue_now;    // store previous value
   if (input_type) {
     //moduleValue_now = analogRead(AnalogIN) * lever_gain;  // update current value
-    cout << "Getting module value" << endl;
-    getCurrentValue();
+    //getCurrentValue();
     //moduleValue_now = wiringPiI2CRead(analog_fd);
-    cout << moduleValue_now << endl;
+    //cout << moduleValue_now << endl;
     if (moduleValue_now < 0) {
         std::cerr << "Error reading from ADS1015." << endl;
     }
@@ -788,7 +778,11 @@ void feed() {
   num_pellets ++;
 }
 
-void experimentOn() {
+#include <atomic>
+#include <csignal> 
+
+atomic<bool> g_stopRequested(false);
+void experimentOn(thread& t) {
   cout << "Experiment ON" << endl;
   int posIndice;
   reInitialize();
@@ -815,6 +809,9 @@ void experimentOn() {
     serialCommand = readSerial(serialFd);
     stateMachine();
   }
+  if (t.joinable()) {
+    t.join();
+  }
 }
 
 std::vector<std::string> split_string(const std::string& input_string, char delimiter) {
@@ -832,14 +829,11 @@ bool stringToBool(const std::string& str) {
     std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c){ return std::tolower(c); });
     
     if (s == "true" || s == "1" || s == "True") {
-        cout << "This thing is true" << endl;
         return true;
     } else if (s == "false" || s == "0" || s == "False") {
-      cout << "This thing is false" << endl;
         return false;
     } 
     else {
-      cout << "This thing is idk" << endl;
       return false;
     }
 }
@@ -900,37 +894,65 @@ void runPythonScript(const std::string& scriptPath) {
 	system(command.c_str());
 }
 
+void initialize_python() {
+  Py_Initialize();
+
+  sysPath = PySys_GetObject("path");
+  PyList_Append(sysPath, PyUnicode_DecodeFSDefault("."));
+  pName = PyUnicode_DecodeFSDefault("getADCValue2");
+  //PyObject* pModule = PyImport_Import(pName);
+  pModule = PyImport_ImportModule("getADCValue2");
+  Py_DECREF(pName);
+  
+  if (pModule != nullptr) {
+      pFunc = PyObject_GetAttrString(pModule, "getValue");
+  }
+  else {
+   cout << " Not module" << endl; 
+   exit(0);
+  }
+  
+}
+
+
+
+
+void signal_handler(int signal) {
+  if(signal = SIGINT) { 
+    cout << "Ctrl+C pressed, stopping threads..." << endl;
+    g_stopRequested.store(true);
+    exit(0);
+  }
+  
+}
+
+void recordADSValue(const std::string& strrrr) {
+  cout << "Entering record ads function" << endl;
+  //initialize_python();
+  
+  while(!g_stopRequested.load()){
+  //while(true){
+    getCurrentValue();
+  }
+  cout << " END" << endl;
+}
+
 int main() {
 	// Initialize wiringPi library and serial port
   //SETUP
+  int port_num = 3;
+  int my_port = 4;
+  signal(SIGINT, signal_handler);
+  cout << "MAIN " << endl;
   
-  
-  while (true) {
-    double value = getPythonPimoroniValue();
-    cout << "Value : " << value << endl;
-    long stt = millis();
-    while(true) {
-      long enddd = millis();
-      if (enddd - stt > 5000) {
-        break;
-      }
-    }
-    continue;
-    
-  }
-  
-  int port_num = 5;
-  int my_port = 6;
-  
-  vector<thread> threads;
+  initialize_python();
   
   string path = "getADCValue.py";
   string GUIscript = "GUI_tkinter_vs3_newer.py " + to_string(port_num);
-	for (int i = 0; i < 5; i++) {
-    threads.emplace_back(runPythonScript, path);
-  }
-	thread pomoroniThread(runPythonScript, path);
+
+	//thread pomoroniThread(runPythonScript, path);
   thread GUIThread(runPythonScript, GUIscript);
+  
   //string command = "python " + GUIscript;
 	//system(command.c_str());
 	if (wiringPiSetup() == -1) {
@@ -974,6 +996,8 @@ int main() {
   loop_timer = millis();
   experiment_start = millis();
   
+  
+  thread recordADS;
 
   //LOOP
   while(true) {
@@ -1017,10 +1041,12 @@ int main() {
                 hold_time_max = stof(parts[14]) * 1000;
                 
                 input_type = stringToBool(parts[17]);
-                cout << ":" << input_type <<  ":  :" << parts[17] << ":" << endl;
                 if(input_type) {
                   //disableInterrupts();
-                  enableInterrupts();
+                  //enableInterrupts();
+                  string stringgg = "nothing";
+                  recordADS = thread(recordADSValue, stringgg);
+                  
                 }
                 else {
                   enableInterrupts();
@@ -1029,7 +1055,7 @@ int main() {
               break;
               case 's':  // Start
                 send_message("received start");
-                experimentOn();
+                experimentOn(recordADS);
                 break;
               case 'a':
                 send_message("received stop");

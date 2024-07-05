@@ -17,31 +17,21 @@ else:
     ads1015.set_sample_rate(860)
 
 reference = ads1015.get_reference_voltage()
-print("Getting value in python file")
 value = ads1015.get_compensated_voltage(
                 channel=CHANNELS[0], reference_voltage=reference
             )
-print("Value: ", value)
+            
 
 
 def getValue():
     try:
-        # for channel in CHANNELS:
-            # value = ads1015.get_compensated_voltage(
-                # channel=channel, reference_voltage=reference
-            # )
-            # # print("{}: {:6.3f}v".format(channel, value))
-
-        # print("")
-        # time.sleep(0.1)
         value = ads1015.get_compensated_voltage(
                 channel=CHANNELS[0], reference_voltage=reference
             )
-        print("Value3333: ", value)
         return value
 
     except KeyboardInterrupt:
         pass
-    except Exception as e:
-        print(f"Error occured: {e}")
-        return 0
+    # except Exception as e:
+        # print(f"Error occured: {e}")
+        # return 0
