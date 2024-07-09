@@ -28,6 +28,11 @@
 
 #include <limits.h>
 
+#include <array>
+
+#include <fstream>
+#include <sstream>
+
 #define SERIAL_PORT "/dev/ttyS0"  // Serial port for communication, change if necessary
 
 
@@ -873,18 +878,87 @@ void recordADSValue(const std::string& strrrr) {
   cout << " END" << endl;
 }
 
-bool is_sixthbit_set(uint16_t s) {
-  const uint16_t mask = 0x0020;
-  const uint16_t mask2 = 0x0046;
-  return (s & mask) != 0 || (s & mask2) != 0;
-  
+string exec(const char* cmd) {
+  std::array<char, 128> buffer;
+  string result;
+  cout << "bef" << endl;
+  unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd, "r"), pclose);
+  cout << "aft" << endl;
+  if(!pipe) {
+    throw runtime_error("popen() failed");
+  }
+  cout << "aft2" << endl;
+  while (true){
+    if (fgets(buffer.data(), buffer.size(), pipe.get()) == nullptr) {
+      if(feof(pipe.get())){
+        break;
+      }
+      else {
+        throw runtime_error("Error reading from pipe");
+      }
+    }
+    result += buffer.data();
+  }
+  //while(fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+    //cout << "bef w" << endl;
+    //result += buffer.data();
+    //cout << result << endl;
+    //usleep(100000000);
+  //}
+  cout << "aft3" << endl;
+  return result;
 }
 
+
+void runSocat() {
+  string socatCmd = "socat -d -d pty,raw,echo=0 pty,raw,echo=0 > socat_output.txt 2>&1";
+  int result = system(socatCmd.c_str());
+  if (result == -1) { 
+    throw runtime_error("Failed to start socat");
+  }
+}
 int main() {
 	// Initialize wiringPi library and serial port
   //SETUP
-  int port_num = 3;
-  int my_port = 4;
+  
+  
+  thread socatThread(runSocat);
+  
+  this_thread::sleep_for(chrono::seconds(1));
+  
+  ifstream socatOutput("socat_output.txt");
+  if(!socatOutput.is_open()){
+    throw runtime_error("Failed to open socat output file");
+  }
+  
+  string line;
+  string port1, port2;
+  
+  while(getline(socatOutput, line)) { 
+    if (line.find("PTY is " ) != string::npos) {
+      cout << "found " << endl;
+      if (port1.empty()){
+        port1 = line.substr(line.find("/dev/pts/"));
+      } else if(port2.empty()){
+        port2 = line.substr(line.find("/dev/pts/"));
+      }
+    }
+  }
+  
+  socatOutput.close();
+  //socatThread.detach();
+  
+  cout << "Port 1: " << port1 << endl;
+  cout << "Port 2: " << port2 << endl;
+  
+
+  
+  int port_num = stoi(port1.substr(9));
+  int my_port = stoi(port2.substr(9));
+  
+  cout << port_num << endl;
+  cout << my_port << endl;
+  
   signal(SIGINT, signal_handler);
   cout << "MAIN " << endl;
   
