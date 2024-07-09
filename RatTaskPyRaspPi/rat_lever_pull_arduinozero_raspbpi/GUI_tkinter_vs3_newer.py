@@ -254,7 +254,7 @@ def readArduinoLine():
             return False, np.zeros(0), np.zeros(0)
         
         pieces += 1
-        print("pieces" + str(pieces))
+        # print("pieces" + str(pieces))
         pieces = 0
         # dataDeque = deque([0], maxlen=buffer_size)
         # timeDeque = deque([0] * buffer_size, maxlen=buffer_size) 
@@ -336,14 +336,26 @@ def plotData(time_Array, data_Array):
             length = i
             break
     sum = 0
+    changes_time_sum = 0
+    changes_time = 0;
+    changes = 0
     for i in range(len(time_Array) - 1):
-        sum += time_Array[i + 1] - time_Array[i];
+        sum += time_Array[i + 1] - time_Array[i]
+        if (time_Array[i] > 1):
+            changes_time += time_Array[i + 1] - time_Array[i]
+        if (data_Array[i] != data_Array[i + 1]):
+            changes += 1;
+            changes_time_sum += changes_time
+            changes_time = 0
+            
     if (len(time_Array) > 0):
         average = sum / len(time_Array)
+        average_change_time = changes_time_sum / changes
         time_total = (time_Array[len(time_Array) - 1] - time_Array[0]) / 1000
         print("Time total" + str(time_total))
         hertz = len(data_Array) / time_total
         print("Average time between! : " + str(average))
+        print("Average time between changes! : " + str(average_change_time))
         print("Time example: " + str(time_Array[0]) + " " + str(time_Array[len(time_Array) - 1]))
         print("Hertz : " + str(hertz))
     time_Array = time_Array[length:]

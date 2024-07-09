@@ -232,16 +232,17 @@ void recordCurrentValue() {
 long tries = 0;
 long try_sum = 0;
 long highest = 0;
+
 void getCurrentValue() {
+  auto start = chrono::high_resolution_clock::now();
   long initial_time = millis();
   long other_value = 0;
-  //while(true) {
   
-  uint16_t config = 0x000a; //  a = 1010, first 3 bits change programmable gain
+  uint16_t config = 0xc00a; //  a = 1010, first 3 bits change programmable gain
+  //c = 1100, first 3 bits decide the samples per second, 110 = 3300
   
-
     bitset<16> bits;
-    wiringPiI2CWriteReg16(analog_fd, ADS1015_REG_CONFIG, config);
+    auto elapsed_here1 = chrono::duration_cast<chrono::nanoseconds>(chrono::high_resolution_clock::now() - start).count();
     bits =  wiringPiI2CReadReg16(analog_fd, ADS1015_CONVERSION_REG);
     uint16_t bits2;
     bits2 = static_cast<uint16_t>(bits.to_ulong());
@@ -250,6 +251,8 @@ void getCurrentValue() {
     uint16_t value = (static_cast<uint16_t>(lowByte) << 8) | highByte;
     int16_t bef = value;
     value = value / pow(2, 4);
+    
+    
     
     int16_t bef2 = value;
     
@@ -261,28 +264,27 @@ void getCurrentValue() {
     if (other_value < lowest_value) {
       lowest_value = other_value; 
     }
-    //&& bits2 != 0
-    //if (other_value !=0) { 
-    //moduleValue_now = other_value - lowest_value;
-    moduleValue_now = other_value;
-    std::cout << "Module value : " << moduleValue_now << std::endl;
+    
+    if (other_value < 5000) {
+      moduleValue_now = other_value;
+    }
+    
+    
+    //std::cout << "Module value : " << moduleValue_now << std::endl;
     //std::cout << "Bits : " << bits << std::endl;
     //std::cout << "Bits num : " << bits2 << std::endl;
     //std::cout << "Before : " << bef << std::endl;
     
     //std::cout << "Before 2: " << bef2 << std::endl;
-      
-      //break;
-      //return;
-     //}
+
     
     if (moduleValue_now == -1) {
       std::cout << "error -1" << std::endl;
     }
-    //}
-    //moduleValue_now = getPythonPimoroniValue();
-    
-     //cout << "Lowest : " << lowest_value << endl;
+
+    //cout << "Lowest : " << lowest_value << endl;
+    auto end = chrono::high_resolution_clock::now();
+    auto elapsed_here = chrono::duration_cast<chrono::nanoseconds>(end - start).count();
     long final_time = millis();
     long timer1 = final_time - initial_time;
     try_sum += timer1;
@@ -326,10 +328,6 @@ void stateMachine() {
   //% read module force
    moduleValue_before = moduleValue_now;    // store previous value
   if (input_type) {
-    //moduleValue_now = analogRead(AnalogIN) * lever_gain;  // update current value
-    //getCurrentValue();
-    //moduleValue_now = wiringPiI2CRead(analog_fd);
-    //cout << moduleValue_now << endl;
     if (moduleValue_now < 0) {
         std::cerr << "Error reading from ADS1015." << endl;
     }
@@ -431,7 +429,7 @@ void stateMachine() {
     // STATE_TRIAL_STARTED
     case STATE_TRIAL_STARTED:
       // send_message("STATE_TRIAL_STARTED");
-      cout << "STATE_TRIAL_STARTED" << endl;
+      //cout << "STATE_TRIAL_STARTED" << endl;
       // check if trial time out (give a chance to continue if force > hit_thresh)
       if (trial_time > hit_window * 1000 && moduleValue_now < hit_thresh) {
         send_message("trial_time > hit_window && moduleValue_now < hit_thresh");
@@ -632,15 +630,6 @@ void enableInterrupts() {
 
 void disableInterrupts() {
   if (attached) {
-    //stringstream command;
-    //command << "/usr/local/bin/gpio edge " << pinA << " none";
-    //string commandStr = command.str();
-    //system(commandStr.c_str());
-    //stringstream command2;
-    //command2 << "/usr/local/bin/gpio edge " << pinB << " none";
-    //string commandStr2 = command2.str();
-    //system(commandStr2.c_str());
-    
     while (isr_running) {
       usleep(10);
     }
@@ -843,15 +832,6 @@ void reInitialize() {
 
 // Function to read from serial
 std::string readSerial(int fd) {
-    //char buffer[256];
-    //int n = read(fd, buffer, sizeof(buffer) - 1);
-    //if (n < 0) {
-        //std::cerr << "Failed to read from serial port" << std::endl;
-        //return "";
-    //} else {
-        //buffer[n] = '\0';
-        //return std::string(buffer);
-    //}
     string buffer;
     int bytes_received = serialDataAvail(serialFd);
     if (bytes_received > 0) {
@@ -874,28 +854,6 @@ void runPythonScript(const std::string& scriptPath) {
 	system(command.c_str());
 }
 
-void initialize_python() {
-  Py_Initialize();
-
-  sysPath = PySys_GetObject("path");
-  PyList_Append(sysPath, PyUnicode_DecodeFSDefault("."));
-  pName = PyUnicode_DecodeFSDefault("getADCValue2");
-  //PyObject* pModule = PyImport_Import(pName);
-  pModule = PyImport_ImportModule("getADCValue2");
-  Py_DECREF(pName);
-  
-  if (pModule != nullptr) {
-      pFunc = PyObject_GetAttrString(pModule, "getValue");
-  }
-  else {
-   cout << " Not module" << endl; 
-   exit(0);
-  }
-  
-}
-
-
-
 
 void signal_handler(int signal) {
   if(signal = SIGINT) { 
@@ -908,10 +866,8 @@ void signal_handler(int signal) {
 
 void recordADSValue(const std::string& strrrr) {
   cout << "Entering record ads function" << endl;
-  //initialize_python();
   
   while(!g_stopRequested.load()){
-  //while(true){
     getCurrentValue();
   }
   cout << " END" << endl;
@@ -927,21 +883,17 @@ bool is_sixthbit_set(uint16_t s) {
 int main() {
 	// Initialize wiringPi library and serial port
   //SETUP
-  int port_num = 6;
-  int my_port = 7;
+  int port_num = 3;
+  int my_port = 4;
   signal(SIGINT, signal_handler);
   cout << "MAIN " << endl;
   
-  //initialize_python();
   
   string path = "getADCValue.py";
   string GUIscript = "GUI_tkinter_vs3_newer.py " + to_string(port_num);
 
-	//thread pomoroniThread(runPythonScript, path);
   thread GUIThread(runPythonScript, GUIscript);
   
-  //string command = "python " + GUIscript;
-	//system(command.c_str());
 	if (wiringPiSetup() == -1) {
         std::cerr << "WiringPi setup failed" << std::endl;
         return 1;
@@ -956,14 +908,9 @@ int main() {
     cout << "Successfully setup I2C" << endl;
   }
   
+  wiringPiI2CWriteReg16(analog_fd, ADS1015_REG_CONFIG, 0xc00a); //setup ADC for continuous read
   
   
-  //uint16_t config = 0x83C3; // +/- 2.048V range, continuous conversion mode
-  
-  //wiringPiI2CWriteReg16(analog_fd, ADS1015_CONFIG_REG, config);
-  
-  
-  //serialFd = serialOpen("/dev/ttyAMA0", 115200); //baud rate
   string port_path = "/dev/pts/" + to_string(my_port);
   serialFd = serialOpen(port_path.c_str(), 115200); //baud rate
   if (serialFd == -1) {
@@ -985,44 +932,16 @@ int main() {
   
   
   thread recordADS;
+  thread recordADS2;
+  thread recordADS3;
+  thread recordADS4;
+  thread recordADS5;
+  thread recordADS6;
+  thread recordADS7;
   uint16_t largest_range = 0;
   uint16_t largest_config = 0;
-
-  //while(true) {
-  //wiringPiI2CWriteReg16(analog_fd, ADS1015_REG_CONFIG, 0x000a);
-    //for (uint16_t config= 0x003a; config < 0xFFFF; config+= 2) {
-      //int lowest_mod = 100000;
-      //int highest_mod = -100000;
-      ////wiringPiI2CWriteReg16(analog_fd, ADS1015_REG_CONFIG, 0x0001);
-      ////wiringPiI2CWriteReg16(analog_fd, ADS1015_REG_CONFIG, 0x478a);
-      //for (int i = 0; i < 25; i++) {
-        ////if (is_sixthbit_set(config)) {
-          ////continue;
-        ////}
-        ////cout << "Config: " << config << endl;
-        ////cout << "0x" << hex << std::setfill('0') << setw(4) << config << dec << endl;
-        ////
-        //getCurrentValue();
-        //if (moduleValue_now > highest_mod) {
-          //highest_mod = moduleValue_now;
-          ////cout << "Higher mod " << highest_mod << endl;
-        //}
-        
-        //if (moduleValue_now < lowest_mod) {
-          //lowest_mod = moduleValue_now;
-          ////cout << "Lower mod " << lowest_mod << endl;
-        //}
-        
-        //if (highest_mod - lowest_mod > largest_range) {
-          //largest_range = highest_mod - lowest_mod;
-          //largest_config = config;
-        //}
-        ////cout << "Largest config is : " << largest_config << "  with range of " << largest_range << endl;
-        
-        
-        //usleep(1000);
-      //}
-    //}
+  
+  
     
     
   //}

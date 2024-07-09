@@ -1,0 +1,17 @@
+iniThreshold,100
+iniBaseline,1
+minDuration,30
+hitWindow,2
+hitThresh,150
+hitThreshAdapt,True
+hitThreshMin,50
+hitThreshMax,150
+leverGain,1
+forceDrop,1000
+maxTrials,100
+holdTime,0.76
+holdTimeAdapt,True
+holdTimeMin,0
+holdTimeMax,1
+saveFolder,/home/ethier-lab/Documents/RatPull/Motopya/RatTaskPyRaspPi
+ratID,100
