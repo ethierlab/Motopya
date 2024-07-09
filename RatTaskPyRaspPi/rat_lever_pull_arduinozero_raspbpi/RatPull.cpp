@@ -24,6 +24,9 @@
 #include <bitset>
 #include <math.h>
 
+#include <iomanip>
+
+
 
 #define SERIAL_PORT "/dev/ttyS0"  // Serial port for communication, change if necessary
 
@@ -104,7 +107,7 @@ bool adapt_hold_time;
 bool adapt_drop_tolerance;
 
 
-int lowest_value = 0;
+int lowest_value = 1000;
 
 // - lever values
 int moduleValue_before = 0;
@@ -231,7 +234,6 @@ long tries = 0;
 long try_sum = 0;
 long highest = 0;
 double getPythonPimoroniValue() {
-  long initial_time = millis();
   double value = 0;
     if (pFunc && PyCallable_Check(pFunc)) {
       pValue = PyObject_CallObject(pFunc, nullptr);
@@ -277,7 +279,7 @@ double getPythonPimoroniValue() {
 #define ADS1015_CONFIG_DR_128SPS 0x00E0
 
 void getCurrentValue() {
-
+  long initial_time = millis();
   long other_value = 0;
   //while(true) {
   
@@ -290,32 +292,55 @@ void getCurrentValue() {
 
     bitset<16> bits;
     //wiringPiI2CWriteReg16(analog_fd, ADS1015_REG_CONFIG, configth);
-    delay(20);
+    wiringPiI2CWriteReg16(analog_fd, ADS1015_REG_CONFIG, 0x0004);
     bits =  wiringPiI2CReadReg16(analog_fd, ADS1015_CONVERSION_REG);
     uint16_t bits2;
     bits2 = static_cast<uint16_t>(bits.to_ulong());
     uint8_t highByte = (bits2 >> 8) & 0xFF;
     uint8_t lowByte = bits2 & 0xFF;
     uint16_t value = (static_cast<uint16_t>(lowByte) << 8) | highByte;
+    int16_t bef = value;
     value = value / pow(2, 4);
+    
     if (value < 200) {
       value += 4095;
     }
     value -= 4036;
     other_value = value * lever_gain;
-    if (other_value !=0) {
-      std::cout << "Module value : " << moduleValue_now << std::endl;
-      std::cout << "Bits : " << bits << std::endl;
-      moduleValue_now = other_value;
+    if (other_value < lowest_value) {
+      lowest_value = other_value; 
+    }
+    //&& bits2 != 0
+    //if (other_value !=0) { 
+    moduleValue_now = other_value - lowest_value;
+    //std::cout << "Module value : " << moduleValue_now << std::endl;
+    //std::cout << "Bits : " << bits << std::endl;
+    //std::cout << "Before : " << bits2 << std::endl;
+      
       //break;
-      return;
-     }
+      //return;
+     //}
     
     if (moduleValue_now == -1) {
       std::cout << "error -1" << std::endl;
     }
-    ////}
+    //}
     //moduleValue_now = getPythonPimoroniValue();
+    
+     //cout << "Lowest : " << lowest_value << endl;
+    long final_time = millis();
+    long timer1 = final_time - initial_time;
+    try_sum += timer1;
+    tries += 1;
+    long average = (try_sum / tries);
+    if (timer1 > highest) {
+      highest = timer1;
+    }
+    //cout << "Wait time : " << timer1 << endl;
+    cout <<  "Average wait time : " << average << " ms " << endl;
+    //cout << "Highest : " << highest << " ms " << endl;
+    
+    return;
 
 }
 
@@ -937,15 +962,22 @@ void recordADSValue(const std::string& strrrr) {
   cout << " END" << endl;
 }
 
+bool is_sixthbit_set(uint16_t s) {
+  const uint16_t mask = 0x0020;
+  const uint16_t mask2 = 0x0046;
+  return (s & mask) != 0 || (s & mask2) != 0;
+  
+}
+
 int main() {
 	// Initialize wiringPi library and serial port
   //SETUP
-  int port_num = 3;
-  int my_port = 4;
+  int port_num = 6;
+  int my_port = 7;
   signal(SIGINT, signal_handler);
   cout << "MAIN " << endl;
   
-  initialize_python();
+  //initialize_python();
   
   string path = "getADCValue.py";
   string GUIscript = "GUI_tkinter_vs3_newer.py " + to_string(port_num);
@@ -971,9 +1003,9 @@ int main() {
   
   
   
-  uint16_t config = 0x83C3; // +/- 2.048V range, continuous conversion mode
+  //uint16_t config = 0x83C3; // +/- 2.048V range, continuous conversion mode
   
-  wiringPiI2CWriteReg16(analog_fd, ADS1015_CONFIG_REG, config);
+  //wiringPiI2CWriteReg16(analog_fd, ADS1015_CONFIG_REG, config);
   
   
   //serialFd = serialOpen("/dev/ttyAMA0", 115200); //baud rate
@@ -999,6 +1031,23 @@ int main() {
   
   thread recordADS;
 
+
+  //while(true) {
+    //for (uint16_t config= 0x0000; config < 0xFFFF; config+= 16) {
+      //for (int i = 0; i < 25; i++) {
+        //if (is_sixthbit_set(config)) {
+          //continue;
+        //}
+        //cout << "Config: " << config << endl;
+        //cout << "0x" << hex << std::setfill('0') << setw(4) << config << dec << endl;
+        //wiringPiI2CWriteReg16(analog_fd, ADS1015_REG_CONFIG, config);
+        //getCurrentValue();
+        ////usleep(10000);
+      //}
+    //}
+    
+    
+  //}
   //LOOP
   while(true) {
 
