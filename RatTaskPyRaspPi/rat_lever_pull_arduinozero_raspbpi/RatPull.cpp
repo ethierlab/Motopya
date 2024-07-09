@@ -26,7 +26,7 @@
 
 #include <iomanip>
 
-
+#include <limits.h>
 
 #define SERIAL_PORT "/dev/ttyS0"  // Serial port for communication, change if necessary
 
@@ -227,72 +227,21 @@ void recordCurrentValue() {
 }
 
 
+#define ADS1015_REG_CONFIG 0x01
 
-  
-  
 long tries = 0;
 long try_sum = 0;
 long highest = 0;
-double getPythonPimoroniValue() {
-  double value = 0;
-    if (pFunc && PyCallable_Check(pFunc)) {
-      pValue = PyObject_CallObject(pFunc, nullptr);
-      value = PyFloat_AsDouble(pValue);
-      if(pValue != nullptr) {
-        //cout << "Result of add : " << value << endl;
-        Py_DECREF(pValue);
-      }
-      else {
-        PyErr_Print();
-        cerr << "Call to add() failed" << endl;
-      }
-      //Py_DECREF(pFunc); 
-    }
-    else {
-      cout << "Not callable func" << endl;
-      exit(0);
-    }
-  //Py_Finalize();
-  if (value * 100 < lowest_value) {
-   lowest_value = value * 100; 
-  }
-  //cout << "Lowest : " << lowest_value << endl;
-  //long final_time = millis();
-  //long timer1 = final_time - initial_time;
-  //try_sum += timer1;
-  //tries += 1;
-  //long average = (try_sum / tries);
-  //if (timer1 > highest) {
-    //highest = timer1;
-  //}
-  //cout << "Wait time : " << timer1 << endl <<  "Average wait time : " << average << " ms " << endl << "Highest : " << highest << " ms " << endl;
-  
-  return value * 100 - lowest_value;
-}
-
-#define ADS1015_REG_CONFIG 0x01
-
-#define ADS1015_CONFIG_OS_SINGLE 0x8000
-#define ADS1015_CONFIG_MUX_SINGLE_0 0x4000
-#define ADS1015_CONFIG_PGA_4_096V 0x0200
-#define ADS1015_CONFIG_MODE_SINGLE 0x0100
-#define ADS1015_CONFIG_DR_128SPS 0x00E0
-
 void getCurrentValue() {
   long initial_time = millis();
   long other_value = 0;
   //while(true) {
   
-  uint16_t config = ADS1015_CONFIG_OS_SINGLE | 
-  ADS1015_CONFIG_MUX_SINGLE_0 | 
-  ADS1015_CONFIG_PGA_4_096V | 
-  ADS1015_CONFIG_MODE_SINGLE | 
-  ADS1015_CONFIG_DR_128SPS;
+  uint16_t config = 0x000a; //  a = 1010, first 3 bits change programmable gain
   
 
     bitset<16> bits;
-    //wiringPiI2CWriteReg16(analog_fd, ADS1015_REG_CONFIG, configth);
-    wiringPiI2CWriteReg16(analog_fd, ADS1015_REG_CONFIG, 0x0004);
+    wiringPiI2CWriteReg16(analog_fd, ADS1015_REG_CONFIG, config);
     bits =  wiringPiI2CReadReg16(analog_fd, ADS1015_CONVERSION_REG);
     uint16_t bits2;
     bits2 = static_cast<uint16_t>(bits.to_ulong());
@@ -302,20 +251,26 @@ void getCurrentValue() {
     int16_t bef = value;
     value = value / pow(2, 4);
     
-    if (value < 200) {
+    int16_t bef2 = value;
+    
+    if (value < 2048) {
       value += 4095;
     }
-    value -= 4036;
+    value -= 3622;
     other_value = value * lever_gain;
     if (other_value < lowest_value) {
       lowest_value = other_value; 
     }
     //&& bits2 != 0
     //if (other_value !=0) { 
-    moduleValue_now = other_value - lowest_value;
-    //std::cout << "Module value : " << moduleValue_now << std::endl;
+    //moduleValue_now = other_value - lowest_value;
+    moduleValue_now = other_value;
+    std::cout << "Module value : " << moduleValue_now << std::endl;
     //std::cout << "Bits : " << bits << std::endl;
-    //std::cout << "Before : " << bits2 << std::endl;
+    //std::cout << "Bits num : " << bits2 << std::endl;
+    //std::cout << "Before : " << bef << std::endl;
+    
+    //std::cout << "Before 2: " << bef2 << std::endl;
       
       //break;
       //return;
@@ -337,7 +292,7 @@ void getCurrentValue() {
       highest = timer1;
     }
     //cout << "Wait time : " << timer1 << endl;
-    cout <<  "Average wait time : " << average << " ms " << endl;
+    //cout <<  "Average wait time : " << average << " ms " << endl;
     //cout << "Highest : " << highest << " ms " << endl;
     
     return;
@@ -1030,19 +985,42 @@ int main() {
   
   
   thread recordADS;
-
+  uint16_t largest_range = 0;
+  uint16_t largest_config = 0;
 
   //while(true) {
-    //for (uint16_t config= 0x0000; config < 0xFFFF; config+= 16) {
+  //wiringPiI2CWriteReg16(analog_fd, ADS1015_REG_CONFIG, 0x000a);
+    //for (uint16_t config= 0x003a; config < 0xFFFF; config+= 2) {
+      //int lowest_mod = 100000;
+      //int highest_mod = -100000;
+      ////wiringPiI2CWriteReg16(analog_fd, ADS1015_REG_CONFIG, 0x0001);
+      ////wiringPiI2CWriteReg16(analog_fd, ADS1015_REG_CONFIG, 0x478a);
       //for (int i = 0; i < 25; i++) {
-        //if (is_sixthbit_set(config)) {
-          //continue;
-        //}
-        //cout << "Config: " << config << endl;
-        //cout << "0x" << hex << std::setfill('0') << setw(4) << config << dec << endl;
-        //wiringPiI2CWriteReg16(analog_fd, ADS1015_REG_CONFIG, config);
+        ////if (is_sixthbit_set(config)) {
+          ////continue;
+        ////}
+        ////cout << "Config: " << config << endl;
+        ////cout << "0x" << hex << std::setfill('0') << setw(4) << config << dec << endl;
+        ////
         //getCurrentValue();
-        ////usleep(10000);
+        //if (moduleValue_now > highest_mod) {
+          //highest_mod = moduleValue_now;
+          ////cout << "Higher mod " << highest_mod << endl;
+        //}
+        
+        //if (moduleValue_now < lowest_mod) {
+          //lowest_mod = moduleValue_now;
+          ////cout << "Lower mod " << lowest_mod << endl;
+        //}
+        
+        //if (highest_mod - lowest_mod > largest_range) {
+          //largest_range = highest_mod - lowest_mod;
+          //largest_config = config;
+        //}
+        ////cout << "Largest config is : " << largest_config << "  with range of " << largest_range << endl;
+        
+        
+        //usleep(1000);
       //}
     //}
     
