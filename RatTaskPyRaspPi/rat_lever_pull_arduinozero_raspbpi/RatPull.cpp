@@ -1011,7 +1011,9 @@ int main() {
   
   this_thread::sleep_for(chrono::seconds(1));
   
-  ifstream socatOutput("socat_output.txt");
+  string socatFileName = "socat_output.txt";
+  
+  ifstream socatOutput(socatFileName);
   if(!socatOutput.is_open()){
     throw runtime_error("Failed to open socat output file");
   }
@@ -1031,6 +1033,10 @@ int main() {
   }
   
   socatOutput.close(); 
+  if (remove(socatFileName.c_str()) !=0 ) {
+    cerr << "Error: Could not delete the file "  << socatFileName << endl;
+    return 1;
+  }
   //socatThread.detach();
   
   cout << "Port 1: " << port1 << endl;
