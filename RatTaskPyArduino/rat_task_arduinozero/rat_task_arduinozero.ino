@@ -774,6 +774,5 @@ void loop() {
       break;
     case 'f':
       feed();
-      serialCommand = "s";
   }
 }
