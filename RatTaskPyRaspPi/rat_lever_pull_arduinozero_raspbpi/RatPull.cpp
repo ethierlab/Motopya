@@ -403,9 +403,10 @@ void stateMachine() {
   //% read module force
   //getCurrentValue();
   moduleValue_before = moduleValue_now;
-  moduleValue_now = threadValue_now;
+
    //moduleValue_before = moduleValue_now;    // store previous value
   if (input_type) {
+    moduleValue_now = threadValue_now;
     if (moduleValue_now < 0) {
         std::cerr << "Error reading from ADS1015." << endl;
     }
@@ -708,9 +709,6 @@ void disableInterrupt(int pin) {
 
 void enableInterrupts() {
   if (!attached) {
-    while (isr_running) {
-      usleep(10);
-    }
     enableInterrupt(pinA);
     enableInterrupt(pinB);
     attached = true;
@@ -719,9 +717,6 @@ void enableInterrupts() {
 
 void disableInterrupts() {
   if (attached) {
-    while (isr_running) {
-      usleep(10);
-    }
     disableInterrupt(pinA);
     disableInterrupt(pinB);
     attached = false;
@@ -825,6 +820,9 @@ void updateEncoderValue() {
      
     }
   }
+  if (encoderPos < 0){
+    encoderPos = 0;
+  }
   
   previousA = encoderA;
   previousB = encoderB;
@@ -871,6 +869,7 @@ void experimentOn() {
     
     stateMachine();
   }
+  cout << "Experiment loop ended" << endl;
 }
 
 std::vector<std::string> split_string(const std::string& input_string, char delimiter) {
@@ -1037,7 +1036,6 @@ int main() {
     cerr << "Error: Could not delete the file "  << socatFileName << endl;
     return 1;
   }
-  //socatThread.detach();
   
   cout << "Port 1: " << port1 << endl;
   cout << "Port 2: " << port2 << endl;
@@ -1094,7 +1092,7 @@ int main() {
   
   
   thread recordADS;
-  recordADS = thread(recordADSValue, "HI");
+  
   
   uint16_t largest_range = 0;
   uint16_t largest_config = 0;
@@ -1104,13 +1102,13 @@ int main() {
   string GUIscript = "GUI_tkinter_vs3_newer.py " + to_string(port_num);
 
   thread GUIThread(runPythonScript, GUIscript);
-  
+  GUIThread.detach();
     
     
   //}
   //LOOP
   while(true) {
-
+    cout << "In main while " << endl;
     //std::string serialCommand = readSerial(serialFd);
     serialCommand = "";
     while (serialDataAvail(serialFd)) {
@@ -1156,15 +1154,14 @@ int main() {
                   input_type = stringToBool(parts[17]);
                   
                   send_message("received start");
-                  experimentOn();
-                  if(input_type) {
-                    //disableInterrupts();
-                    //enableInterrupts();
-                    string stringgg = "nothing";
-                  }
-                  else {
+                  
+                  if(!input_type) {
                     enableInterrupts();
                   }
+                  else {
+                    recordADS = thread(recordADSValue, "HI");
+                  }
+                  experimentOn();
                 }
                 break;
               case 'a':
