@@ -134,6 +134,7 @@ def connectArduino():
 def sendArduino(text):
     cmd = text + '\r'
     try:
+        print("Device is connected")
         arduino.write(cmd.encode())
         arduino.reset_output_buffer()
         return True
@@ -504,12 +505,12 @@ def start():
     startButton.config(text="PAUSE")
     stopButton.config(state="normal")
     if not testConnection():
+        print("connection not tested")
         return
     try:
         arduino.flush()
         arduino.flushInput()
-        send_parameters()
-        sendArduino("s" + parameters["iniThreshold"].get() + "b" + parameters["iniBaseline"].get()) # déclenche la boucle essai dans arduino et envoie le seuil pour déclencher l essaie
+        send_start()
         # t.sleep(8) # permet au buffer d'arduino de se remplir
 
 
@@ -523,7 +524,10 @@ def start():
             try:
                 if arduino.inWaiting() > 1:
                     readArduinoInput()
-                top.update()
+                try:
+                    top.update()
+                except KeyboardInterrupt:
+                    sys.exit()
             except serial.SerialException:
                 disconnected()
                 print("The device unexpectedly disconnected.")
@@ -827,15 +831,14 @@ def save_configuration():
     print("Configuration saved")
     # top.deiconify()
 
-def send_parameters():
+def send_start():
     global parameters
     parameters["iniBaseline"].set("1")
-    message = "p"
+    message = "s"
     for value in parameters.values():
         message += str(value.get()) + ";"
     message += str(lever_type) + ";"
     sendArduino(message)
-    # sendArduino("p" + init_thresh + ";" + init_baseline + ";" + min_duration + ";" + hit_window + ";" + hit_thresh)
     reload_plot()
     
 
@@ -1172,7 +1175,11 @@ DisplayBox.grid(row=2, column=2, sticky="n", pady=(20,20))
 
 
 reload_plot()
-top.mainloop()
+try:
+    top.mainloop()
+except KeyboardInterrupt:
+    # print("Process terminated")
+    sys.exit()
 
 
 # removed stuff

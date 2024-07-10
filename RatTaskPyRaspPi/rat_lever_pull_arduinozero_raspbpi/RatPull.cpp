@@ -46,7 +46,12 @@ int AnalogIN = 0;
 const int pinA = 5;  // A output
 const int pinB = 6;  // B output
 const int feed_pin = 22;
+const int sound_pin = 21;
 string serialCommand = "wait";
+
+int init_sound = 4000;
+int reward_sound = 10000;
+int failure_sound = 1000;
 
 int initial;
 int previousA = -1;
@@ -88,7 +93,7 @@ int num_pellets = 0;
 int num_rewards = 0;
 int num_trials = 0;
 
-int duration;
+int duration = 100000;
 int MaxTrialNum = 100;
 
 int hold_time = 500;
@@ -118,6 +123,8 @@ int lowest_value = 1000;
 // - lever values
 int moduleValue_before = 0;
 int moduleValue_now = 0;
+int threadValue_now = 0;
+int threadValue_before = 0;
 int moduleValue_encoder = 0;
 int peak_moduleValue = 0;
 
@@ -131,6 +138,7 @@ int trial_end_time;
 int trial_time;
 auto pause_timer = millis();
 auto loop_timer = millis();
+auto nano_loop_timer = chrono::high_resolution_clock::now();
 long experiment_start;
 long pause_time = 0;
 
@@ -239,6 +247,13 @@ long tries = 0;
 long try_sum = 0;
 long highest = 0;
 
+
+void getWaitTime(const chrono::high_resolution_clock::time_point& start) {
+  cout << "hi" << endl;
+  auto timer = chrono::duration_cast<chrono::nanoseconds>(chrono::high_resolution_clock::now() - start).count();
+  cout << "Wait time : " << timer << endl;
+}
+
 void getCurrentValue() {
   auto start = chrono::high_resolution_clock::now();
   long initial_time = millis();
@@ -246,6 +261,7 @@ void getCurrentValue() {
   
   uint16_t config = 0xc00a; //  a = 1010, first 3 bits change programmable gain
   //c = 1100, first 3 bits decide the samples per second, 110 = 3300
+  //wiringPiI2CWriteReg16(analog_fd, ADS1015_REG_CONFIG, config);
   
     bitset<16> bits;
     auto elapsed_here1 = chrono::duration_cast<chrono::nanoseconds>(chrono::high_resolution_clock::now() - start).count();
@@ -272,11 +288,11 @@ void getCurrentValue() {
     }
     
     if (other_value < 5000) {
-      moduleValue_now = other_value;
+      threadValue_now = other_value;
     }
     
     
-    //std::cout << "Module value : " << moduleValue_now << std::endl;
+    //std::cout << "Module value : " << threadValue_now << endl;
     //std::cout << "Bits : " << bits << std::endl;
     //std::cout << "Bits num : " << bits2 << std::endl;
     //std::cout << "Before : " << bef << std::endl;
@@ -307,11 +323,47 @@ void getCurrentValue() {
 
 }
 
-void feed() {
+void feedThread() {
   num_pellets ++;
   digitalWrite(feed_pin, HIGH);
   usleep(5000);
   digitalWrite(feed_pin, LOW);
+}
+
+void feed() {
+   auto start1 = chrono::high_resolution_clock::now();
+   thread feed_thread(feedThread);
+   feed_thread.detach();
+   
+   getWaitTime(start1);
+}
+
+
+
+void tone(int pin, int frequency, double duration) {
+  cout << "ye" << endl;
+  //return;
+  int halfPeriod = 1000000 / (2 * frequency);
+  //int halfPeriod = 900000 / (2 * frequency);
+  
+  int cycles = duration * frequency / 1000;
+  
+  for (int i = 0; i < cycles; ++i) {
+    digitalWrite(pin, HIGH);
+    this_thread::sleep_for(chrono::microseconds(halfPeriod));
+    digitalWrite(pin, LOW);
+    this_thread::sleep_for(chrono::microseconds(halfPeriod));
+  }
+  cout << "tone" << endl;
+  
+}
+
+void play(int pin, int frequency, double duration) {
+  cout << "play" << endl;
+  return;
+  thread toneThread(tone, pin, frequency, duration);
+  toneThread.detach();
+  //toneThread.join();
 }
 
 
@@ -325,11 +377,21 @@ void stateMachine() {
 
   // warn if longer than expected loop delays
   auto loop_time = millis() - loop_timer;
+  auto nano_time = chrono::duration_cast<chrono::nanoseconds>(chrono::high_resolution_clock::now() - nano_loop_timer).count();
+  while(nano_time < 1000000) {
+    //prevent going faster than 1khz
+    nano_time = chrono::duration_cast<chrono::nanoseconds>(chrono::high_resolution_clock::now() - nano_loop_timer).count();
+  }
+  //cout << nano_time << endl;
+  //while (millis() - loop_timer == 0 ) {
+    //continue;
+  //}
   if (loop_time - pause_time > 100) {
     // fprintf('--- WARNING --- \nlong delay in while loop (%.0f ms)\n', loop_time * 1000);
     send_message("--- WARNING --- long delay in while loop"); // tmp_value_buffer
   }
   loop_timer = millis();
+  nano_loop_timer = chrono::high_resolution_clock::now();
 
 
   // experiment time
@@ -339,7 +401,10 @@ void stateMachine() {
   //TODO
   // drawnow limitrate;  // process callbacks, update figures at 20Hz max
   //% read module force
-   moduleValue_before = moduleValue_now;    // store previous value
+  //getCurrentValue();
+  moduleValue_before = moduleValue_now;
+  moduleValue_now = threadValue_now;
+   //moduleValue_before = moduleValue_now;    // store previous value
   if (input_type) {
     if (moduleValue_now < 0) {
         std::cerr << "Error reading from ADS1015." << endl;
@@ -382,18 +447,24 @@ void stateMachine() {
     // STATE_IDLE
     case STATE_IDLE:
       //cout << "STATE_IDLE" << endl;
+      //cout << "module value now " << moduleValue_now << endl;
       if (session_t > duration * 60 * 1000) {
+        cout << "session_t is " << session_t << endl;
+        cout << "duration is " << duration << endl;
         send_message("Time Out");
+        cout << "Time Out" << endl;
         NEXT_STATE = STATE_SESSION_END;
       }
 
       else if (num_trials >= MaxTrialNum) {
         send_message("Reached Maximum Number of Trials");
+        cout << "Reached Maximum Number of Trials" << endl;
         NEXT_STATE = STATE_SESSION_END;
       }
 
       else if (stop_session) {
         send_message("Manual Stop");
+        cout << "Manual Stop" << endl;
         NEXT_STATE = STATE_SESSION_END;
       }
       
@@ -418,6 +489,8 @@ void stateMachine() {
       // trial_start_time = session_t;
       
       // play(init_sound{1});
+      
+      play(sound_pin, init_sound, 500);
       trial_started = true;
       num_trials = num_trials + 1;
 
@@ -484,6 +557,7 @@ void stateMachine() {
 
       //TODO
       // play(reward_sound{1});
+      play(sound_pin, reward_sound, 500);
       // drawnow;
       success = true;
       trial_end_time = trial_time;
@@ -518,7 +592,6 @@ void stateMachine() {
 
       //update stats & update gui
       num_rewards++;
-      num_pellets++;
 
       NEXT_STATE = STATE_POST_TRIAL;
       break;
@@ -532,6 +605,7 @@ void stateMachine() {
       send_message("trial failed :(");
       //TODO
       // play(failure_sound{1});
+      play(sound_pin, failure_sound, 500);
 
       if (past_10_trials_succ.size() >= 10) {
         past_10_trials_succ.pop_back();
@@ -765,15 +839,18 @@ void updateEncoderValue() {
 #include <csignal> 
 
 atomic<bool> g_stopRequested(false);
-void experimentOn(thread& t) {
+void experimentOn() {
   cout << "Experiment ON" << endl;
-  int posIndice;
+  //int posIndice;
   reInitialize();
   // Devrait aller dans 'case i' :
-  posIndice = serialCommand.find('b');
-  initTrial = stof(serialCommand.substr(1, posIndice));
-  baselineTrial = stof(serialCommand.substr(posIndice + 1));
+  //posIndice = serialCommand.find('b');
+  //initTrial = stof(serialCommand.substr(1, posIndice));
+  //baselineTrial = stof(serialCommand.substr(posIndice + 1));
   while (serialCommand[0] != 'w' && serialCommand[0] != 'e') {
+    if (!serialCommand.empty()){
+      cout << serialCommand << endl;
+    }
     if (serialCommand[0] == 'f') {
       feed();
       serialCommand = "s";
@@ -789,11 +866,10 @@ void experimentOn(thread& t) {
       send_message("received stop");
       stop_session = true;
     }
+
     serialCommand = readSerial(serialFd);
+    
     stateMachine();
-  }
-  if (t.joinable()) {
-    t.join();
   }
 }
 
@@ -972,10 +1048,7 @@ int main() {
   cout << "MAIN " << endl;
   
   
-  string path = "getADCValue.py";
-  string GUIscript = "GUI_tkinter_vs3_newer.py " + to_string(port_num);
-
-  thread GUIThread(runPythonScript, GUIscript);
+  
   
 	if (wiringPiSetup() == -1) {
         std::cerr << "WiringPi setup failed" << std::endl;
@@ -1007,28 +1080,24 @@ int main() {
     
   //pin 22 is pin 6 on the board
   pinMode(feed_pin, OUTPUT);
+  pinMode(sound_pin, OUTPUT);
   
-  
-   //pinMode(OUTPUT_PIN, OUTPUT);
-   
-	
-  //pinMode(AnalogIN, INPUT);
-
   startArduinoProg = millis();  // début programme
   loop_timer = millis();
   experiment_start = millis();
   
   
   thread recordADS;
-  thread recordADS2;
-  thread recordADS3;
-  thread recordADS4;
-  thread recordADS5;
-  thread recordADS6;
-  thread recordADS7;
+  recordADS = thread(recordADSValue, "HI");
+  
   uint16_t largest_range = 0;
   uint16_t largest_config = 0;
   
+  
+  string path = "getADCValue.py";
+  string GUIscript = "GUI_tkinter_vs3_newer.py " + to_string(port_num);
+
+  thread GUIThread(runPythonScript, GUIscript);
   
     
     
@@ -1042,6 +1111,10 @@ int main() {
       char ch = serialGetchar(serialFd);
       serialCommand += ch;
     }
+    if (serialCommand.empty()) {
+      continue;
+    }
+    cout << "Serial command " << serialCommand << endl;
     
     //std::cout << serialCommand << std::endl;
     if (!serialCommand.empty()) {
@@ -1050,46 +1123,43 @@ int main() {
             switch (serialCommand[0]) {  // Première lettre de la commande
               case 'w':  // boucle defaut standby
                 break;
-              case 'p':  // Initialisation : transmission des paramètres de la tâche à partir de Python
+              case 's':  // Initialisation : transmission des paramètres de la tâche à partir de Python // Starting
                 {
-                send_message("received parameters");
-                string variables;
-                variables = serialCommand.substr(1).c_str();
-                serialCommand = "";
-                std::vector<std::string> parts = split_string(variables, ';');
-                initTrial = stof(parts[0]);
-                init_thresh = stoi(parts[0]);
-                baselineTrial = stof(parts[1]);
-                duration = stof(parts[2]);
-                hit_window = stof(parts[3]);
-                hit_thresh =stof(parts[4]);
-                adapt_hit_thresh = stringToBool(parts[5]);
-                hit_thresh_min = stof(parts[6]);
-                hit_thresh_max = stof(parts[7]);
-                lever_gain =stof(parts[8]);
-                failure_tolerance =stof(parts[9]);
-                MaxTrialNum =stof(parts[10]);
-                hold_time =stof(parts[11]) * 1000;
-                adapt_hold_time= stringToBool(parts[12]);
-                hold_time_min = stof(parts[13]) * 1000;
-                hold_time_max = stof(parts[14]) * 1000;
-                
-                input_type = stringToBool(parts[17]);
-                if(input_type) {
-                  //disableInterrupts();
-                  //enableInterrupts();
-                  string stringgg = "nothing";
-                  recordADS = thread(recordADSValue, stringgg);
+                  send_message("received parameters");
+                  string variables;
+                  variables = serialCommand.substr(1).c_str();
+                  serialCommand = "";
+                  std::vector<std::string> parts = split_string(variables, ';');
+                  initTrial = stof(parts[0]);
+                  init_thresh = stoi(parts[0]);
+                  baselineTrial = stof(parts[1]);
+                  duration = stof(parts[2]);
+                  hit_window = stof(parts[3]);
+                  hit_thresh =stof(parts[4]);
+                  adapt_hit_thresh = stringToBool(parts[5]);
+                  hit_thresh_min = stof(parts[6]);
+                  hit_thresh_max = stof(parts[7]);
+                  lever_gain =stof(parts[8]);
+                  failure_tolerance =stof(parts[9]);
+                  MaxTrialNum =stof(parts[10]);
+                  hold_time =stof(parts[11]) * 1000;
+                  adapt_hold_time= stringToBool(parts[12]);
+                  hold_time_min = stof(parts[13]) * 1000;
+                  hold_time_max = stof(parts[14]) * 1000;
                   
+                  input_type = stringToBool(parts[17]);
+                  
+                  send_message("received start");
+                  experimentOn();
+                  if(input_type) {
+                    //disableInterrupts();
+                    //enableInterrupts();
+                    string stringgg = "nothing";
+                  }
+                  else {
+                    enableInterrupts();
+                  }
                 }
-                else {
-                  enableInterrupts();
-                }
-              }
-              break;
-              case 's':  // Start
-                send_message("received start");
-                experimentOn(recordADS);
                 break;
               case 'a':
                 send_message("received stop");
