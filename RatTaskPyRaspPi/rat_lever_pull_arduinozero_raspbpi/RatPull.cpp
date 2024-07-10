@@ -45,6 +45,7 @@ using namespace std;
 int AnalogIN = 0;
 const int pinA = 5;  // A output
 const int pinB = 6;  // B output
+const int feed_pin = 22;
 string serialCommand = "wait";
 
 int initial;
@@ -306,6 +307,13 @@ void getCurrentValue() {
 
 }
 
+void feed() {
+  num_pellets ++;
+  digitalWrite(feed_pin, HIGH);
+  usleep(5000);
+  digitalWrite(feed_pin, LOW);
+}
+
 
 void stateMachine() {
   if (pause_session) {
@@ -487,6 +495,8 @@ void stateMachine() {
 
       // send 1 pellet
       // app.moto.trigger_feeder(1); TODO
+      
+      feed();
 
       // send 1 digital pulse
       // app.moto.stim(); TODO
@@ -714,6 +724,9 @@ void send_message(const string& message) {
   //serialFlush(serialFd);
 }
 
+
+
+
 void updateEncoderValue() {
   isr_running = true;
   int encoderA = digitalRead(pinA);
@@ -746,10 +759,6 @@ void updateEncoderValue() {
   previous_angle = angle;
   moduleValue_encoder = angle;
   isr_running = false;
-}
-
-void feed() {
-  num_pellets ++;
 }
 
 #include <atomic>
@@ -945,7 +954,7 @@ int main() {
     }
   }
   
-  socatOutput.close();
+  socatOutput.close(); 
   //socatThread.detach();
   
   cout << "Port 1: " << port1 << endl;
@@ -983,7 +992,7 @@ int main() {
   }
   
   wiringPiI2CWriteReg16(analog_fd, ADS1015_REG_CONFIG, 0xc00a); //setup ADC for continuous read
-  
+
   
   string port_path = "/dev/pts/" + to_string(my_port);
   serialFd = serialOpen(port_path.c_str(), 115200); //baud rate
@@ -995,6 +1004,11 @@ int main() {
   //pinMode(AnalogIN, INPUT);
   pinMode(pinA, INPUT);// Internal pull-up resistor for switch A
   pinMode(pinB, INPUT);// Internal pull-up resistor for switch B
+    
+  //pin 22 is pin 6 on the board
+  pinMode(feed_pin, OUTPUT);
+  
+  
    //pinMode(OUTPUT_PIN, OUTPUT);
    
 	
@@ -1081,6 +1095,8 @@ int main() {
                 send_message("received stop");
                 stop_session = true;
                 break;
+              case 'f':
+                feed();
             }
         }
 	}
