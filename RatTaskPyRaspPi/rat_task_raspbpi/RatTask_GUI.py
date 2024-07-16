@@ -22,14 +22,14 @@ import os
 if len(sys.argv) < 2:
     print("Usage: python GUI_tkinter_vs3_newer.py <serial port number>")
     print(sys.argv)
-    sys.exit()
-
-argument = sys.argv[1]
-try:
-    int_value = int(argument)
-    print("Arg is integer")
-except ValueError:
-    print("Argument is not an integer:", argument)
+    argument = "1"; 
+else:
+    argument = sys.argv[1]
+    try:
+        int_value = int(argument)
+        print("Arg is integer")
+    except ValueError:
+        print("Argument is not an integer:", argument)
 
 serial_port = argument
 
