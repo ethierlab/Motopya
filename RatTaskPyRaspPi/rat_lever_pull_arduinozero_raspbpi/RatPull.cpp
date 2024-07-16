@@ -33,6 +33,10 @@
 #include <fstream>
 #include <sstream>
 
+#include <mutex>
+#include <shared_mutex>
+#include <condition_variable>
+
 #define SERIAL_PORT "/dev/ttyS0"  // Serial port for communication, change if necessary
 
 
@@ -59,6 +63,7 @@ int previousB = -1;
 int previous_angle;
 int sum = 0;
 int encoderPos = 0;
+int encoderPosPrevious = 0;
 
 int serialFd = 0;
 int analog_fd = 0;
@@ -67,6 +72,7 @@ const int ADS1015_I2C_ADDR = 0x48;
 const int ADS1015_CONFIG_REG= 0x01;
 const int ADS1015_CONVERSION_REG = 0x00;
 
+int reset_pos = 0;
 
 // code controllers
 const int lenBuffer = 25000;
@@ -117,6 +123,8 @@ bool adapt_hit_thresh;
 bool adapt_hold_time;
 bool adapt_drop_tolerance;
 
+bool up = true;
+
 
 int lowest_value = 1000;
 
@@ -126,6 +134,7 @@ int moduleValue_now = 0;
 int threadValue_now = 0;
 int threadValue_before = 0;
 int moduleValue_encoder = 0;
+int moduleValuePrevious_encoder = 0;
 int peak_moduleValue = 0;
 
 // - timers
@@ -139,6 +148,7 @@ int trial_time;
 auto pause_timer = millis();
 auto loop_timer = millis();
 auto nano_loop_timer = chrono::high_resolution_clock::now();
+auto nano_experiment_start = chrono::high_resolution_clock::now();
 long experiment_start;
 long pause_time = 0;
 
@@ -153,7 +163,6 @@ bool success = false;
 bool crashed = false;
 bool stop_session = false;
 bool pause_session = false;
-bool isr_running = false;
 
 // - hard-coded values
 int post_trial_dur = 1000;
@@ -202,6 +211,8 @@ std::string readSerial(int fd);
 void writeSerial(int fd, const std::string &data);
 
 void updateEncoderValue();
+
+void getEncoderValues();
 
 
 // FONCTIONS ---------------------------------
@@ -292,7 +303,7 @@ void getCurrentValue() {
     }
     
     
-    //std::cout << "Module value : " << threadValue_now << endl;
+    std::cout << "Module value : " << threadValue_now << endl;
     //std::cout << "Bits : " << bits << std::endl;
     //std::cout << "Bits num : " << bits2 << std::endl;
     //std::cout << "Before : " << bef << std::endl;
@@ -653,6 +664,9 @@ void stateMachine() {
       trial_value_buffer.clear();
       peak_moduleValue = 0;
       success = false;
+      
+      encoderPos -=  reset_pos;
+      reset_pos = 0;
 
       it_timer = millis();
       NEXT_STATE = STATE_INTER_TRIAL;
@@ -690,10 +704,15 @@ void stateMachine() {
 
 bool attached = false;
 void enableInterrupt(int pin) {
+  //INT_EDGE_BOTH
   std::cout << "Enabling on pin " << pin << std::endl;
-  if (wiringPiISR(pin, INT_EDGE_BOTH, &updateEncoderValue)  < 0) {
+  //if (wiringPiISR(pin, INT_EDGE_BOTH, &updateEncoderValue)  < 0) {
+    //cout << "Failed to enable interrupt" << endl;
+  //}
+  if (wiringPiISR(pin, INT_EDGE_BOTH, &getEncoderValues)  < 0) {
     cout << "Failed to enable interrupt" << endl;
   }
+  
   //std::cout << "Interrupts enabled on pin " << pin << std::endl;
 }
 
@@ -793,14 +812,65 @@ void send_message(const string& message) {
   //serialFlush(serialFd);
 }
 
+deque<pair<int,int>> encoder_deque;
+mutex mtx;
+
+int emplaceCount = 0;
+bool isPopping = false;
+
+long encoder_timer = millis();
+
+bool in_values = false;
+
+int prev_A = 0;
+int prev_B = 0;
+double size_deque = 0;
+double biggest_deque = 0;
+
+void appendToDeque(pair<int, int> item) {
+  lock_guard<mutex> lock(mtx);
+  encoder_deque.emplace_back(item);
+}
+
+pair<int,int> popFromDeque() {
+  lock_guard<mutex> lock(mtx);
+  pair<int,int>  item = make_pair(-1, -1);
+  if (!encoder_deque.empty()){
+    item = encoder_deque.front();
+    encoder_deque.pop_front();
+  }
+  return item;
+}
+
+double getDeqSize() {
+  lock_guard<mutex> lock(mtx);  
+  return encoder_deque.size();
+}
+
+void getEncoderValues() {
+  int A = digitalRead(pinA);
+  int B = digitalRead(pinB);
+  if ( prev_A != A || prev_B != B) {
+    appendToDeque(make_pair(A,B));
+    prev_A = A;
+    prev_B = B;
+  }
+}
 
 
 
 void updateEncoderValue() {
-  isr_running = true;
-  int encoderA = digitalRead(pinA);
-  int encoderB = digitalRead(pinB);
 
+  pair item = popFromDeque();
+  if (item.first == -1) {
+    return;
+  }
+  int encoderA = item.first;
+  int encoderB = item.second;
+
+
+  //cout << encoderA <<  " " << encoderB << " " << millis() << endl;
+  
   if (encoderA != previousA && previousA != -1) {
     if (encoderB != encoderA) {
       encoderPos ++;
@@ -814,23 +884,53 @@ void updateEncoderValue() {
       encoderPos ++;
     }
     else {
-      if (encoderPos > 0) {
-        encoderPos --;
-      }
-     
+      encoderPos --;
     }
-  }
-  if (encoderPos < 0){
-    encoderPos = 0;
   }
   
   previousA = encoderA;
   previousB = encoderB;
   
-  int angle = ((encoderPos / 4)); //%360 abs
+  //int angle = ((encoderPos / 4)); //%360 abs
+  int angle = ((encoderPos)); //%360 abs
   previous_angle = angle;
   moduleValue_encoder = angle;
-  isr_running = false;
+  cout << moduleValue_encoder << endl;
+}
+
+void updateEncoderLoop() {
+  while (true) {
+    updateEncoderValue();
+  }
+  //encoder_timer = millis();
+  
+ //while(true){
+   //int currentEncoderPos = encoderPos;
+   ////updateEncoderValue();
+   //long encoder_time = millis() - encoder_timer;
+   //if (encoderPosPrevious != currentEncoderPos) {
+      //encoder_timer = millis();
+   //}
+   //else if ( encoder_time > 100 && currentEncoderPos < 500 && currentEncoderPos != 0) {
+     //cout << "resetting moduleValue_encoder " << currentEncoderPos << "with time of " << encoder_time << endl;
+     ////reset_pos = currentEncoderValue;
+     //while (encoderPos != 0) {
+       //encoderPos -= encoderPos / abs(encoderPos);
+       //moduleValue_encoder = encoderPos / 4;
+       //usleep(10000);
+     //}
+     
+     //encoder_timer = millis();
+   //}
+   
+   //encoderPosPrevious = currentEncoderPos;
+ //}
+}
+
+void getEncoderValuesLoop() {
+  while (true) {
+    getEncoderValues();
+  }
 }
 
 #include <atomic>
@@ -953,10 +1053,12 @@ void signal_handler(int signal) {
   
 }
 
+bool runAdsThread = false;
+
 void recordADSValue(const std::string& strrrr) {
   cout << "Entering record ads function" << endl;
   
-  while(!g_stopRequested.load()){
+  while(!g_stopRequested.load() && runAdsThread){
     getCurrentValue();
   }
   cout << " END" << endl;
@@ -965,13 +1067,10 @@ void recordADSValue(const std::string& strrrr) {
 string exec(const char* cmd) {
   std::array<char, 128> buffer;
   string result;
-  cout << "bef" << endl;
   unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd, "r"), pclose);
-  cout << "aft" << endl;
   if(!pipe) {
     throw runtime_error("popen() failed");
   }
-  cout << "aft2" << endl;
   while (true){
     if (fgets(buffer.data(), buffer.size(), pipe.get()) == nullptr) {
       if(feof(pipe.get())){
@@ -989,7 +1088,6 @@ string exec(const char* cmd) {
     //cout << result << endl;
     //usleep(100000000);
   //}
-  cout << "aft3" << endl;
   return result;
 }
 
@@ -1084,31 +1182,39 @@ int main() {
     
   //pin 22 is pin 6 on the board
   pinMode(feed_pin, OUTPUT);
+  digitalWrite(feed_pin, HIGH);
+  
   pinMode(sound_pin, OUTPUT);
+  digitalWrite(sound_pin, HIGH);
   
   startArduinoProg = millis();  // début programme
   loop_timer = millis();
   experiment_start = millis();
   
   
-  thread recordADS;
+  //thread recordADS;
   
   
   uint16_t largest_range = 0;
   uint16_t largest_config = 0;
   
-  
+  in_values = false;
   string path = "getADCValue.py";
   string GUIscript = "GUI_tkinter_vs3_newer.py " + to_string(port_num);
 
   thread GUIThread(runPythonScript, GUIscript);
   GUIThread.detach();
-    
-    
-  //}
-  //LOOP
+  
+  thread encoderThread, encoderValuesThread, encoderValuesThread2;
+  encoderThread = thread(updateEncoderLoop);
+  
+  
+  encoderValuesThread = thread(getEncoderValuesLoop);
+  //encoderValuesThread2 = thread(getEncoderValuesLoop);
+  enableInterrupts();
+  
   while(true) {
-    cout << "In main while " << endl;
+    //cout << "In main while " << endl;
     //std::string serialCommand = readSerial(serialFd);
     serialCommand = "";
     while (serialDataAvail(serialFd)) {
@@ -1156,10 +1262,16 @@ int main() {
                   send_message("received start");
                   
                   if(!input_type) {
-                    enableInterrupts();
+                    //enableInterrupts();
+                    runAdsThread = false;
                   }
                   else {
-                    recordADS = thread(recordADSValue, "HI");
+                    if (!runAdsThread){
+                      runAdsThread = true;
+                      //recordADS = thread(recordADSValue, "HI");
+                      //recordADS.detach();
+                    }
+                    
                   }
                   experimentOn();
                 }
