@@ -1200,7 +1200,7 @@ int main() {
   
   in_values = false;
   string path = "getADCValue.py";
-  string GUIscript = "GUI_tkinter_vs3_newer.py " + to_string(port_num);
+  string GUIscript = "RatTask_GUI.py " + to_string(port_num);
 
   thread GUIThread(runPythonScript, GUIscript);
   GUIThread.detach();
