@@ -51,7 +51,7 @@ const int pinA = 5;  // A output
 const int pinB = 6;  // B output
 const int feed_pin = 22;
 const int sound_pin = 21;
-string serialCommand = "wait";
+string serialCommand = "";
 
 int init_sound = 4000;
 int reward_sound = 10000;
@@ -303,7 +303,7 @@ void getCurrentValue() {
     }
     
     
-    std::cout << "Module value : " << threadValue_now << endl;
+    //std::cout << "Module value : " << threadValue_now << endl;
     //std::cout << "Bits : " << bits << std::endl;
     //std::cout << "Bits num : " << bits2 << std::endl;
     //std::cout << "Before : " << bef << std::endl;
@@ -426,7 +426,7 @@ void stateMachine() {
     //cout << "Getting encoder value" << endl;
     moduleValue_now = moduleValue_encoder;
   }
-
+  //cout << "Value : " << moduleValue_now << endl;
   // fill force buffertrial_start_time
   // limit temp buffer size to 'buffer_dur' (last 1s of data)+
 
@@ -506,6 +506,7 @@ void stateMachine() {
       trial_started = true;
       num_trials = num_trials + 1;
 
+      peak_moduleValue = 0;
 
       // Output one digital pulse for onset of trial
       //TODO
@@ -541,6 +542,7 @@ void stateMachine() {
       // check if hit threshold has been reached
       else if (moduleValue_now >= hit_thresh) {
         send_message("moduleValue_now >= hit_thresh");
+        cout << "moduleValue_now >= hit_thresh" << endl;
         hold_timer = millis();
         NEXT_STATE = STATE_HOLD;
       }
@@ -847,17 +849,31 @@ double getDeqSize() {
   return encoder_deque.size();
 }
 
+long o = 0;
+auto nano_read_timer = chrono::high_resolution_clock::now();
+
 void getEncoderValues() {
+  auto timer = chrono::duration_cast<chrono::nanoseconds>(chrono::high_resolution_clock::now() - nano_read_timer).count();
+
   int A = digitalRead(pinA);
   int B = digitalRead(pinB);
+  //cout << A << " " << B << " "<< millis() << " "<<  encoderPos << endl;
+  //cout << A << " "<< B << " "<< millis() <<  endl;
+  //cout << "o: " << o << " " << A << B << endl;
+  //cout << millis() << endl;
   if ( prev_A != A || prev_B != B) {
+    //cout << A << " " << B << " "<< millis() << " "<<  encoderPos << endl;
     appendToDeque(make_pair(A,B));
     prev_A = A;
     prev_B = B;
   }
+  //o += 1;
+  nano_read_timer = chrono::high_resolution_clock::now();
 }
 
-
+int prev_AB = 0;
+int prev_count = 0;
+bool upp = true;
 
 void updateEncoderValue() {
 
@@ -867,64 +883,70 @@ void updateEncoderValue() {
   }
   int encoderA = item.first;
   int encoderB = item.second;
-
-
-  //cout << encoderA <<  " " << encoderB << " " << millis() << endl;
+  
+  //if (encoderA == 0 && encoderB == 0 && previousA == 1 && previousB == 1 || encoderA == 1 && encoderB == 1 && previousA == 0 && previousB == 0
+  //|| encoderA == 1 && encoderB == 0 && previousA == 0 && previousB == 1 || encoderA == 0 && encoderB == 1 && previousA == 1 && previousB == 0) {
+    //if (upp) {
+      //encoderPos += 2;
+    //}
+    //else {
+      //encoderPos -= 2;
+    //}
+    //previousA = encoderA;
+    //previousB = encoderB;
+    
+    //moduleValue_encoder = ((encoderPos / 4)); //%360 abs
+    //return;
+  //}
   
   if (encoderA != previousA && previousA != -1) {
     if (encoderB != encoderA) {
       encoderPos ++;
+      upp = true;
     }
     else {
       encoderPos --;
+      upp = false;
     }
   }
   if (encoderB != previousB && previousB != -1) {
     if (encoderB == encoderA) {
       encoderPos ++;
+      upp = true;
     }
     else {
       encoderPos --;
+      upp = false;
     }
   }
+  //if (!(encoderA != previousA && previousA != -1) && !(encoderB != previousB && previousB != -1)) {
+    //int comb = encoderA + encoderB * 2;
+    //prev_count += 1;
+    //if (prev_AB == comb) {
+      //cout << "Count : " << prev_count << " of num " << comb << endl;
+    //}
+    //else {
+      //prev_AB = comb;
+      //prev_count = 1;
+      //cout << "Count : " << prev_count << " of num " << comb << endl;
+    //}
+    //previousA = encoderA;
+    //previousB = encoderB;
+    //return;
+  //}
   
   previousA = encoderA;
   previousB = encoderB;
   
-  //int angle = ((encoderPos / 4)); //%360 abs
-  int angle = ((encoderPos)); //%360 abs
-  previous_angle = angle;
-  moduleValue_encoder = angle;
-  cout << moduleValue_encoder << endl;
+  moduleValue_encoder = ((encoderPos / 4)); //%360 abs
+  //cout << moduleValue_encoder << " " << encoderPos << endl;
+  cout << encoderA << " " << encoderB << " "<< millis() << " "<<  encoderPos << endl;
 }
 
 void updateEncoderLoop() {
   while (true) {
     updateEncoderValue();
   }
-  //encoder_timer = millis();
-  
- //while(true){
-   //int currentEncoderPos = encoderPos;
-   ////updateEncoderValue();
-   //long encoder_time = millis() - encoder_timer;
-   //if (encoderPosPrevious != currentEncoderPos) {
-      //encoder_timer = millis();
-   //}
-   //else if ( encoder_time > 100 && currentEncoderPos < 500 && currentEncoderPos != 0) {
-     //cout << "resetting moduleValue_encoder " << currentEncoderPos << "with time of " << encoder_time << endl;
-     ////reset_pos = currentEncoderValue;
-     //while (encoderPos != 0) {
-       //encoderPos -= encoderPos / abs(encoderPos);
-       //moduleValue_encoder = encoderPos / 4;
-       //usleep(10000);
-     //}
-     
-     //encoder_timer = millis();
-   //}
-   
-   //encoderPosPrevious = currentEncoderPos;
- //}
 }
 
 void getEncoderValuesLoop() {
@@ -939,12 +961,7 @@ void getEncoderValuesLoop() {
 atomic<bool> g_stopRequested(false);
 void experimentOn() {
   cout << "Experiment ON" << endl;
-  //int posIndice;
   reInitialize();
-  // Devrait aller dans 'case i' :
-  //posIndice = serialCommand.find('b');
-  //initTrial = stof(serialCommand.substr(1, posIndice));
-  //baselineTrial = stof(serialCommand.substr(posIndice + 1));
   while (serialCommand[0] != 'w' && serialCommand[0] != 'e') {
     if (!serialCommand.empty()){
       cout << serialCommand << endl;
@@ -1000,7 +1017,7 @@ void reInitialize() {
   //serialFlush(serialFd);
   CURRENT_STATE = STATE_IDLE;
   NEXT_STATE = CURRENT_STATE; 
-  //tmp_value_buffer.clear();    // [time value], first row is oldest data
+  tmp_value_buffer.clear();    // [time value], first row is oldest data
   trial_value_buffer.clear();  // [time value]
   past_10_trials_succ.clear();
   num_pellets = 0;
@@ -1170,7 +1187,7 @@ int main() {
 
   
   string port_path = "/dev/pts/" + to_string(my_port);
-  serialFd = serialOpen(port_path.c_str(), 115200); //baud rate
+  serialFd = serialOpen(port_path.c_str(), 9600); //baud rate
   if (serialFd == -1) {
         std::cout << "Failed to open serial port: " << std::endl;
         return 1;
@@ -1192,7 +1209,8 @@ int main() {
   experiment_start = millis();
   
   
-  //thread recordADS;
+  thread recordADS;
+  //unique_ptr<thread> recordADS;
   
   
   uint16_t largest_range = 0;
@@ -1205,27 +1223,20 @@ int main() {
   thread GUIThread(runPythonScript, GUIscript);
   GUIThread.detach();
   
-  thread encoderThread, encoderValuesThread, encoderValuesThread2;
+  thread encoderThread, encoderValuesThread;
   encoderThread = thread(updateEncoderLoop);
   
-  
   encoderValuesThread = thread(getEncoderValuesLoop);
-  //encoderValuesThread2 = thread(getEncoderValuesLoop);
-  enableInterrupts();
+
+  //enableInterrupts();
   
   while(true) {
     //cout << "In main while " << endl;
     //std::string serialCommand = readSerial(serialFd);
-    serialCommand = "";
-    while (serialDataAvail(serialFd)) {
-      char ch = serialGetchar(serialFd);
-      serialCommand += ch;
-    }
+    serialCommand = readSerial(serialFd);
     if (serialCommand.empty()) {
       continue;
     }
-    cout << "Serial command " << serialCommand << endl;
-    
     //std::cout << serialCommand << std::endl;
     if (!serialCommand.empty()) {
             empty_stated = true;
@@ -1264,15 +1275,37 @@ int main() {
                   if(!input_type) {
                     //enableInterrupts();
                     runAdsThread = false;
+                    //if (recordADS && recordADS->joinable()) {
+                      //recordADS->join();
+                      //recordADS = make_unique<thread>(recordADSValue);
+                    //}
+                    
                   }
                   else {
+
                     if (!runAdsThread){
                       runAdsThread = true;
-                      //recordADS = thread(recordADSValue, "HI");
-                      //recordADS.detach();
+                      //if (recordADS && recordADS->joinable()) {
+                        //recordADS->join();
+                        //cout << "Was joinable " << endl;
+                      //}
+                      //else {
+                        //cout << "Was not joinable " << endl;
+                      //}
+                      //recordADS = make_unique<thread>(recordADSValue);
+                      recordADS = thread(recordADSValue, "HI");
+                      recordADS.detach();
                     }
                     
                   }
+                  
+                  //thread experiment(experimentOn);
+                  //while(true) {
+                    //if (experiment.joinable()){
+                      //experiment.join();
+                      //break;
+                    //}
+                  //}
                   experimentOn();
                 }
                 break;
