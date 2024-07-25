@@ -120,7 +120,7 @@ def connectArduino():
     # Serial communication
     if arduino:
         arduino.close()
-    arduino = serial.Serial(port_found, 115211)
+    arduino = serial.Serial(port_found, 9600)
     t.sleep(1)
     arduino.flushInput()  # vide le buffer en provenance de l'arduino
     connected = True
@@ -134,7 +134,7 @@ def connectArduino():
 def sendArduino(text):
     cmd = text + '\r'
     try:
-        print("Device is connected")
+        print("Sending " + text[0:10] + " ... to device")
         arduino.write(cmd.encode())
         arduino.reset_output_buffer()
         return True
