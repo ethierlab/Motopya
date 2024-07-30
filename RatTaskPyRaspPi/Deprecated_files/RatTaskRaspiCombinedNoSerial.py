@@ -4,7 +4,6 @@ import tkinter.font as font
 import time as t
 from datetime import datetime
 from datetime import timedelta
-import serial
 import math
 import numpy as np
 import matplotlib.pyplot as plt
@@ -44,11 +43,8 @@ import numpy as np
 
 import smbus2
 
-
-
-serialBuffer = []
-serialMessageBuffer = []
-
+printed = False;
+trial_done = False;
 # SETTINGS
 AnalogIN = 0
 pinA = 2
@@ -131,6 +127,7 @@ pause_time = 0
 # BUFFERS
 tmp_value_buffer = []  # [time, value]
 trial_value_buffer = []  # [time, value]
+plot_trial_value_buffer = []  # [time, value]
 past_10_trials_succ = []
 
 # BOOLS
@@ -177,12 +174,7 @@ def record_current_value():
         del max
     trial_time = session_t - trial_start_time
     values = [trial_time, moduleValue_now]
-    if len(trial_value_buffer) >= lenBuffer:
-        send_trial_data_to_python(False)
-        trial_value_buffer.clear()
     trial_value_buffer.append(values)
-    if (moduleValue_now > peak_moduleValue):
-        print(moduleValue_now)
     peak_moduleValue = max(peak_moduleValue, moduleValue_now)
 
 def state_machine():
@@ -190,7 +182,7 @@ def state_machine():
     global CURRENT_STATE, NEXT_STATE, num_trials, success, stop_session
     global peak_moduleValue, trial_time, trial_end_time, trial_value_buffer, pause_session, pause_time
     global loop_timer, trial_start_time, hit_thresh, hold_time, hold_timer, min, num_rewards
-    global num_pellets, it_timer
+    global num_pellets, it_timer, printed
     if not min:
         del min
     if pause_session:
@@ -222,6 +214,8 @@ def state_machine():
 
     if trial_started:
         record_current_value()
+    else:
+        record_current_value()
 
     if CURRENT_STATE == STATE_IDLE:
         if session_t > duration * 60 :
@@ -239,40 +233,51 @@ def state_machine():
             play(500, init_sound)
 
     elif CURRENT_STATE == STATE_TRIAL_INIT:
-#         print("INIT")
+        if not printed:
+            print("INIT")
+            printed = True
         trial_started = True
         num_trials += 1
 
         if len(tmp_value_buffer) > 0:
             trial_value_buffer.clear()
             trial_value_buffer.extend([[sublist[0] - trial_start_time, sublist[1]] for sublist in tmp_value_buffer[:-1]])
-            send_trial_data_to_python(False)
-            trial_value_buffer.clear()
 
         NEXT_STATE = STATE_TRIAL_STARTED
+        printed = False
 
     elif CURRENT_STATE == STATE_TRIAL_STARTED:
-        print("STARTED, module value: " + str(moduleValue_now))
+        if not printed:
+            print("STARTED, module value: " + str(moduleValue_now))
+            printed = True
         if trial_time > hit_window * 1000 and moduleValue_now < hit_thresh:
-            print("trial_time > hit_window and moduleValue_now < hit_thresh" + str(trial_time) + " > " + str(hit_window))
             NEXT_STATE = STATE_FAILURE
+            printed = False
         elif moduleValue_now <= peak_moduleValue - failure_tolerance:
-            print("moduleValue_now <= peak_moduleValue - failure_tolerance")
             NEXT_STATE = STATE_FAILURE
+            printed = False
         elif moduleValue_now >= hit_thresh:
             hold_timer = time.time() * 1000 - experiment_start
+            printed = False
             NEXT_STATE = STATE_HOLD
 
     elif CURRENT_STATE == STATE_HOLD:
-        print("HOLD")
+        if not printed:
+            print("HOLD")
+            printed = True
+        
         if moduleValue_now < hit_thresh:
             hold_timer = time.time() * 1000 - experiment_start
             NEXT_STATE = STATE_TRIAL_STARTED
+            printed = False
         elif get_timer_duration(hold_timer) >= hold_time:
             NEXT_STATE = STATE_SUCCESS
+            printed = False
 
     elif CURRENT_STATE == STATE_SUCCESS:
-        print("SUCCESS")
+        if not printed:
+            print("SUCCESS")
+            printed = True
         trial_hit_thresh = hit_thresh
         trial_hold_time = hold_time
         send_message("STATE_SUCCESS")
@@ -297,6 +302,7 @@ def state_machine():
         num_pellets += 1
 
         NEXT_STATE = STATE_POST_TRIAL
+        printed = False
 
     elif CURRENT_STATE == STATE_FAILURE:
         print("FAILURE")
@@ -324,13 +330,12 @@ def state_machine():
         NEXT_STATE = STATE_POST_TRIAL
 
     elif CURRENT_STATE == STATE_POST_TRIAL:
-        print("POST_TRIAL")
+        if not printed:
+            print("POST_TRIAL")
+            printed = True
         if trial_time - trial_end_time >= post_trial_dur:
             NEXT_STATE = STATE_PARAM_UPDATE
-        else:
-            print("trial_time : " + str(trial_time) + "\ntrial_end_time : " +
-                  str(trial_end_time) + "\ntime - end_time = : " + str(trial_time - trial_end_time)
-                  + "\npost_trial_dur : " + str(post_trial_dur))
+            printed = False
 
     elif CURRENT_STATE == STATE_PARAM_UPDATE:
         print("UPDATE")
@@ -345,16 +350,19 @@ def state_machine():
         NEXT_STATE = STATE_INTER_TRIAL
 
     elif CURRENT_STATE == STATE_INTER_TRIAL:
-        print("INTER")
+        if not printed:
+            print("INTER")
+            printed = True
+        
         if get_timer_duration(it_timer) >= inter_trial_dur:
             it_timer = time.time() * 1000 - experiment_start
             NEXT_STATE = STATE_IDLE
+            printed = False
 
     elif CURRENT_STATE == STATE_SESSION_END:
         print("SESSION_END")
         send_message(str(time.time() * 1000 - experiment_start))
         send_message("done")
-#         send_message("STATE_SESSION_END")
 
         serialCommand = "e"
         reinitialize()
@@ -386,53 +394,16 @@ def send_trial_data_to_python(done):
     global trial_value_buffer, success, trial_hit_thresh, trial_hold_time
     global num_trials, trial_start_time, init_thresh, hit_thresh, hold_time, trial_end_time
     global success, peak_moduleValue, num_pellets, num_rewards, trial_hold_time, trial_hit_thresh
-    global serialBuffer, sending
-    sending = True
-    addition = ""
-    for i in range(len(trial_value_buffer)):
-        # detachInterrupts();
-        addition += str(trial_value_buffer[i][0])
-        addition += str("/")
-        addition += str(trial_value_buffer[i][1])
-        addition += str(";")
-        # attachInterrupts();
-    # detachInterrupts();
-    addition += str("nt")
-    addition += str(num_trials)
-    addition += str(";")
-    addition += str(trial_start_time)
-    addition += str(";")
-    addition += str(init_thresh)
-    addition += str(";")
-    addition += str(hold_time)
-    addition += str(";")
-    addition += str(hit_thresh)
-    addition += str(";")
-    addition += str(trial_end_time)
-    addition += str(";")
-    addition += str(success)
-    addition += str(";")
-    addition += str(peak_moduleValue)
-    addition += str(";")
-    addition += str(num_pellets)
-    addition += str(";")
-    addition += str(num_rewards)
-    addition += str(";")
-    addition += str(trial_hold_time)
-    addition += str(";")
-    addition += str(trial_hit_thresh)
-    if (not done):
-        addition += str("partialEnd");
-    serialBuffer.append(addition)
-    
-    sending = False;
-    # attachInterrupts();
-    # interrupts();
-    # code de fin d'envoi de données
+    global serialBuffer, sending, trial_done, plot_trial_value_buffer
+    plot_trial_value_buffer = trial_value_buffer[:]
+    trial_value_buffer.clear()
+    getTrialData()
+    #trial_done = True
+    return
 
 def send_message(msg):
-    global serialMessageBuffer
-    serialMessageBuffer.append(str(msg))
+    print(msg)
+    
 
 def reinitialize():
     global num_trials, num_pellets, num_rewards, initTrial, baselineTrial, trial_started, experiment_start
@@ -520,17 +491,6 @@ def main_loop():
             hold_time_min = float(parts[13]) * 1000;
             hold_time_max = float(parts[14]) * 1000;
             input_type = bool(parts[17]);
-
-            # if(input_type) {
-            # detachInterrupt(digitalPinToInterrupt(pinA));
-            # detachInterrupt(digitalPinToInterrupt(pinB));
-            # send_message("input_type true");
-            # }
-            # else {
-            # attachInterrupt(digitalPinToInterrupt(pinA), updateEncoderValue, CHANGE);
-            # attachInterrupt(digitalPinToInterrupt(pinB), updateEncoderValue, CHANGE);
-            # send_message("input_type false");
-            # }
         elif first == "s":
             send_message("received start")
             experimentOn()
@@ -541,7 +501,6 @@ def main_loop():
 
 print("starting thread")
 main_thread = threading.Thread(target=main_loop)
-#     second_thread = threading.Thread(target=
 main_thread.start()
 
 
@@ -578,67 +537,13 @@ global buffer_size
 dataDeque = deque()
 timeDeque = deque() 
 
-# StorageVariable
-# global sensorValueTrial
-# sensorValueTrial = np.empty((1, buffer_size),
-#                             dtype="float")  # accumulation ligne par ligne des valeurs du senseur à chaque essai
-# global sensorTimeStamp
-# sensorTimeStamp = np.empty((1, buffer_size), dtype="float")  # les temps pour chacun des essais
-
-
-def testConnection():
-    try:
-        return sendArduino("testing")
-    except Exception as e:
-        print("An error occurred:", e)
-        disconnected()
-        return False
-
 def connectArduino():
     print("connecting")
     global connected
     clear_stats()
-    ports = serial.tools.list_ports.comports()
-    port_found = None
-    for port in ports:
-        print("Port:", port.device)
-        print("Description:", port.description)
-        print("Hardware ID:", port.hwid)
-        print("Manufacturer:", port.manufacturer)
-        print("Product:", port.product)
-        print("Serial Number:", port.serial_number)
-        print("===================================")
-        if (not port.description):
-            port.description = ""
-        if (not port.manufacturer):
-            port.manufacturer = ""
-        if "tty" in port.description.lower() or "tty" in port.manufacturer.lower() or "tty" in port.device.lower():
-            print(port.description.lower())
-            description = port.description
-            print(description)
-            port_found = port.device
-    port_found = "/dev/pts/4"
-    description = "the raspberry pi"
-    if port_found == None:
-        print("Arduino not found")
-        lamp.turn_off()
-        return
-    else:
-        print(f"Arduino found at port {port_found} in description {description}")
-        lamp.turn_on()
-        
-
-    
-    # Serial communication
-    # if arduino:
-    #     arduino.close()
-    # arduino = serial.Serial(port_found, 115211)
-    t.sleep(1)
-    # arduino.flushInput()  # vide le buffer en provenance de l'arduino
+    lamp.turn_on()
+    top.update()
     connected = True
-
-    testConnection()
-
     entry_changed()
         
 
@@ -646,177 +551,58 @@ def connectArduino():
 def sendArduino(text):
     global serialCommand
     cmd = text + '\r'
-    try:
-#         arduino.write(cmd.encode())
-#         arduino.reset_output_buffer()
-        serialCommand = text
-        print(serialCommand)
-        return True
-    except serial.SerialException:
-        print("Device not connected.")
-        disconnected()
-        return False
-    except PermissionError:
-        print("Device not connected.")
-        disconnected()
-        return False
-
-
-def readArduinoInput():
-    # Arduino envoie deux lignes une première de valeurs du senseur et une deuxième des timestamps
-    # global sensorValueTrial
-    # global sensorTimeStamp
-    global dataDeque, timeDeque
-
-    received, dataArray, timeArray = readArduinoLine()
-    if not received:
-        return
-    else:
-        print("received")
-
-    # # Deuxième ligne
-        
-    plotData(timeArray, dataArray)
-    
-    # arduino.flushInput()  # vide le buffer en provenance de l'arduino
+    serialCommand = text
+    return True
 
 stateList = []
 pieces = 0
-def readArduinoLine():
+def getTrialData():
     global pieces
     global dataDeque
     global timeDeque
     global num_trials, num_pellets, num_rewards
-    global serialBuffer, serialMessageBuffer
-#     output = arduino.readline()
-#     output = str(output, 'utf-8') 
-    if (len(serialMessageBuffer) > 0):
-        new_output = serialMessageBuffer[0]
-        serialMessageBuffer.pop(0)
-        stateList.append(new_output)    
-#         print("*\n*")
-#         print(stateList[-100:])
-        if ("done" in new_output):
-            stop_Button()
-        return False, np.zeros(0), np.zeros(0)
-    if (len(serialBuffer) > 0):
-        print("got trial data")
-        partial = False
-        output = serialBuffer[0]
-        serialBuffer.pop(0)
-        
-
-        if ("partialEnd" in output):
-            partial = True
-            pieces += 1
-            output = output.removesuffix('partialEnd')  # input en 'string'. Each arduino value is separated by ';'
-        # data = output.split(";nt", 1)
-#         print(output)
-        data = output.split("nt", 1)
-        trial_data = data[0].split(";")
-#         print(len(trial_data))
-        # dataDeque = deque([0] * buffer_size, maxlen=buffer_size)
-        # timeDeque = deque([0] * buffer_size, maxlen=buffer_size) 
-        for pair in trial_data:
-            if pair:  # Ignore empty strings
-#                 print(pair, end=' ')
-                try:
-                    time, value = pair.split('/')
-                except ValueError as e:
-                    print("pair : " + str(pair))
-                    print(e)
-                except Exception as e:
-                     print("pair : " + str(pair))
-                     print(e)
-                try:
-                    if not (time == '0' and value == '0') and abs(float(time)) < 10000 and float(value) < 2000:
-                        dataDeque.extend([value])
-                        timeDeque.extend([time])
-                except ValueError as e:
-                    print("pair : " + str(pair))
-                    print(e)
-                    continue
-#         print("\n")
-
-        
-#         zipped = list(zip(timeDeque, dataDeque))
-#         for item in range(len(zipped)):
-#             if (float(zipped[item][0]) > 10000):
-#                 print(str(item) + str(zipped[item]), end = " ")
-#         print("x")
-
-        dataArray = np.array(dataDeque).astype(float)
-        timeArray = np.array(timeDeque).astype(float)
-        
-        dataList = dataArray
-        timeList = timeArray
-        dataList = dataList.tolist()
-        timeList = timeList.tolist()
-
-        if partial:
-            pieces += 1
-            print("PARTIAL SPLIT")
-            return False, np.zeros(0), np.zeros(0)
-        else:
-            print("FULL")
-        
-        pieces += 1
-#         print("pieces" + str(pieces))
-        pieces = 0
-        # dataDeque = deque([0], maxlen=buffer_size)
-        # timeDeque = deque([0] * buffer_size, maxlen=buffer_size) 
-        dataDeque.clear()
-        timeDeque.clear()
-        stateList.clear()
-
+    global plot_trial_value_buffer,buffer_size
     
+    for pair in plot_trial_value_buffer:
+        timeDeque.extend([pair[0]])
+        dataDeque.extend([pair[1]])
+    dataArray = np.array(dataDeque).astype(float)
+    timeArray = np.array(timeDeque).astype(float)
     
-    
-        trial_numbers = data[1].split(";")
-        num_trials = int(trial_numbers[0])
-        trial_start_time = int(float(trial_numbers[1]) / 1000)
-        
-        init_thresh = int(trial_numbers[2])
-        hold_time = int(float(trial_numbers[3]))
-        parameters["holdTime"].set(str(float(trial_numbers[3]) / 1000))
+    dataList = dataArray
+    timeList = timeArray
+    dataList = dataList.tolist()
+    timeList = timeList.tolist()
 
-        hit_thresh = int(float(trial_numbers[4]))
-        parameters["hitThresh"].set(str(int(float(trial_numbers[4]))))
-        trial_end_time = int(float(trial_numbers[5]))
-        success = bool(trial_numbers[6])
-        if success:
-            display("Success")
-        else:
-            display("Failed")
-        peak_moduleValue = int(float(trial_numbers[7]))
-        num_pellets = int(trial_numbers[8])
-        num_rewards = int(trial_numbers[9])
-        trial_hold_time = int(float(trial_numbers[10]))
-        trial_hit_thresh = int(float(trial_numbers[11]))
+    dataDeque.clear()
+    timeDeque.clear()
+    stateList.clear()
 
-        trial = {}
-        trial["start_time"] = trial_start_time / 1000
-        trial["init_thresh"] = init_thresh
-        trial["hit_thresh"] = trial_hit_thresh
-        trial["Force"] = list(zip(list(timeList), list(dataList)))
-        trial["hold_time"] = trial_hold_time
-        trial["duration"] = trial_end_time / 1000
-        trial["success"] = success
-        trial["peak"] = peak_moduleValue
-
-        trial_table.append(trial)
-
-        session["Last_hit_thresh"] = trial_hit_thresh
-        session["Last_hold_time"] = trial_hold_time
-
-
-        return True, dataArray, timeArray
-
+    global num_trials, trial_start_time, init_thresh, hold_time, hit_thresh, trial_end_time, success, peak_moduleValue, num_pellets
+    global num_rewards, trial_hold_time, trial_hit_thresh
+           
+    if success:
+        display("Success")
     else:
+        display("Failed")
 
-        print("full input not found")
+    trial = {}
+    trial["start_time"] = trial_start_time / 1000
+    trial["init_thresh"] = init_thresh
+    trial["hit_thresh"] = trial_hit_thresh
+    trial["Force"] = list(zip(list(timeList), list(dataList)))
+    trial["hold_time"] = trial_hold_time
+    trial["duration"] = trial_end_time / 1000
+    trial["success"] = success
+    trial["peak"] = peak_moduleValue
 
-        return False, np.zeros(0), np.zeros(0)
+    trial_table.append(trial)
+
+    session["Last_hit_thresh"] = trial_hit_thresh
+    session["Last_hold_time"] = trial_hold_time
+
+    plotData(timeArray, dataArray)
+    return True, dataArray, timeArray
     
 
 
@@ -855,14 +641,17 @@ def plotData(time_Array, data_Array):
         print("Hertz : " + str(hertz))
     time_Array = time_Array[length:]
     data_Array = data_Array[length:]
-    # for i in range(len(time_Array)):
-    #     if float(data_Array[i]) != 0:
-            # print(str(time_Array[i]) + " with " + str(data_Array[i]))
-    # axeTempRel
+
+#     axeTempRel.clear()
     global max_force
     
     # axeTempRel = (time_Array - time_Array.min()) / 1000
-    axeTempRel = (time_Array) / 1000
+    if (len(time_Array) > 0):
+        time_Array = time_Array - time_Array.min() - 1000
+        axeTempRel = (time_Array) / 1000 
+       
+    axeTempRel = (time_Array) / 1000 
+    
     
     if len(axeTempRel) == 0:
         max_time = 3
@@ -990,7 +779,7 @@ def start():
     global session_running
     global session
     global max_force
-    global serialBuffer, serialMessageBuffer
+    global serialBuffer, serialMessageBuffer, trial_done
     max_force = 0
     current_datetime = datetime.now()
     session["Start_time"] = current_datetime.strftime("%d-%B-%Y %H:%M:%S")
@@ -1000,8 +789,6 @@ def start():
     session_running = True
     startButton.config(text="PAUSE")
     stopButton.config(state="normal")
-    if not testConnection():
-        return
     try:
         # arduino.flush()
         # arduino.flushInput()
@@ -1018,11 +805,13 @@ def start():
             chronometer(debut)
             updateDisplayValues()
             try:
-                # if arduino.inWaiting() > 1:
-                #     readArduinoInput()
-                if len(serialBuffer) > 0 or len(serialMessageBuffer) > 0:
-                    readArduinoInput()
+#                 plotData(timeArray, dataArray)
+#                 continue
+                if trial_done:
+                    getTrialData()
+                    trial_done = False
                 top.update()
+                
             except serial.SerialException:
                 disconnected()
                 print("The device unexpectedly disconnected.")
@@ -1039,6 +828,7 @@ def start():
 
 def feed():
     sendArduino("f")
+    
 # stop l'expérience
 def stop_Button():
     global session_running
@@ -1234,9 +1024,6 @@ def manage_time():
         max_time['state'] = DISABLED
 
 
-
-
-
 def load_parameters():
     global parameters
     file_path = filedialog.askopenfilename()
@@ -1276,30 +1063,10 @@ def clear_stats():
     session.clear()
     startButton.config(text="START")
 
-def reset_device():
-    print("resetting")
-    # if arduino:
-    #     print("resetting")
-    #     # time.sleep(0.1)
-    #     # arduino.setDTR(True)
-    #     # arduino.setRTS(True)
-    #     # arduino.dtr = True
-    #     arduino.close()
-    # else:
-    #     print("not resetting")
-
 
 def finish_up(crashed):
-    display('Session Ended');
-    
-    # reset_buttons(app)
-
-    # trial_table = trial_table(1:num_trials, :);  
-    # trial_table.Properties.CustomProperties.num_trials  = num_trials;
-    # trial_table.Properties.CustomProperties.num_rewards = num_rewards;
-    # trial_table.Properties.CustomProperties.rat_id      = app.rat_id.Value;
-    # display_results(session_t, num_trials, num_rewards, app.num_pellets, app.man_pellets);
-    save_results(crashed);
+    display('Session Ended')
+    save_results(crashed)
     clear_stats()
 
 def save_configuration():
@@ -1335,7 +1102,6 @@ def send_parameters():
         message += str(value.get()) + ";"
     message += str(lever_type)
     sendArduino(message)
-    # sendArduino("p" + init_thresh + ";" + init_baseline + ";" + min_duration + ";" + hit_window + ";" + hit_thresh)
     reload_plot()
     
 
@@ -1517,6 +1283,7 @@ set_button_size(Cadre2, 10, 2, ('Serif', 10, "bold"))
 # ________________________________________________________________
 # définition du cadre d'information de trials
 # #infos sur les trials, rewards et temps passé
+
 Cadre3 = Frame(CadreDroite)
 Cadre3.grid(row=1, column=2)
 
@@ -1536,7 +1303,7 @@ RewardsLabel = Label(Cadre3, text="Num Rewards:", font=font)
 RewardsLabel.grid(row=2, column=0)
 Rewards = Label(Cadre3, text="0", font=font)
 Rewards.grid(row=2, column=1)
-# Med_pick = Label(Cadre3, text="Median Peak:", font="bold").grid(row=2, column=1)
+
 PelletLabel = Label(Cadre3, text="Pellets delivered:", font=font)
 PelletLabel.grid(row=1, column=3)
 Pellet = Label(Cadre3, text="0 (0.000 g)", font=font)
@@ -1554,11 +1321,11 @@ set_sticky(Cadre3)
 # --------------------------------
 Cadre4 = Frame(CadreGauche)
 Cadre4.grid(row=2, column=1, padx=20, pady=(0, 20))
-# Cadre5.config(borderwidth=2, relief=RIDGE)
+
 Cadre4.config(relief=RIDGE)
 Cadre5 = Frame(Cadre4)
 Cadre5.grid(row=2, column=0)
-# Cadre5.config(borderwidth=2, relief=RIDGE)
+
 Cadre5.config(relief=RIDGE, bg="#e0e0e0")
 Cadre5.grid_rowconfigure(0, pad=10,)
 Cadre5.grid_rowconfigure(1, pad=10)
@@ -1651,12 +1418,13 @@ Cadre6 = Frame(CadreDroite)
 Cadre6.grid(row=2, column=2)
 
 Title_array = Label(Cadre6, text="Knob Rotation Angle").grid(row=1, column=1, columnspan=2, pady=2)
-# fig = plt.Figure(figsize=(3, 2), dpi=211, layout='constrained')
+
+
 fig = plt.Figure(figsize=(3, 3), dpi=200)
 ax = fig.add_subplot(111)
 
 fig.patch.set_facecolor('#f0f0f0')
-canvas = FigureCanvasTkAgg(fig, master=Cadre6)  # tk.DrawingArea.
+canvas = FigureCanvasTkAgg(fig, master=Cadre6)
 canvas.get_tk_widget().grid(row=1, column=1, columnspan=2, sticky='E', pady=2)
 
 
@@ -1666,6 +1434,7 @@ Cadre7.grid(row=4, column=1, sticky="n", pady=(20,20))
 
 typeButton = Button(Cadre7, text='Toggle Input Type', command=lambda: toggle_input_type(top, 0))
 typeButton.grid(row=1, column=2)
+
 # Label qui montre des messages
 DisplayBox = Label(Cadre7, text="", font=("Serif", 12))
 DisplayBox.grid(row=2, column=2, sticky="n", pady=(20,20))
@@ -1673,23 +1442,3 @@ DisplayBox.grid(row=2, column=2, sticky="n", pady=(20,20))
 
 reload_plot()
 top.mainloop()
-
-
-# removed stuff
-
-
-
-# def browse():
-#     Save_browser = askopenfilename()
-#     Save_location.delete(1, END)
-#     Save_location.insert(1, Save_browser)
-
-
-# Save = Label(Cadre1, text="Save location (parent folder):").grid(row=3, column=1)
-# Save_location = Entry(Cadre1, textvariable=savefolder).grid(row=3, column=2)
-# Browse = Button(Cadre1, text="Browse", command=browse)
-# Browse.grid(row=3, column=3)
-
-# Calibration = Label(Cadre1, text="Calibration file location:").grid(row=4, column=1)
-# Calib = Entry(Cadre1, ).grid(row=4, column=2)
-# Change = Button(Cadre1, text="Change").grid(row=4, column=3)
