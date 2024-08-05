@@ -5,15 +5,18 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.animation as animation
 from signal import pause
-from rotary_encoder import setup_encoder, get_latest_angle, get_angles, get_timestamps
-from trial_logic import trial_logic, get_trial_counts, reset_trial_counts, is_in_iti_period
-
+from rotary_encoder import setup_encoder, get_latest_angle, get_angles, get_timestamps, trial_start, get_trial_start
+from trial_logic import trial_logic, get_trial_counts, reset_trial_counts, is_in_iti_period, is_trial_started, get_reference_time
+import threading
+import numpy as np
+import time as t
 # Initialize trial parameters
-init_threshold = 10
+init_threshold = 50
 hit_duration = 5
-hit_threshold = 40
+hit_threshold = 100
+hold_time = 1
+post_duration = 1
 iti = 1
-hold_time = 0
 
 # Create the Tkinter application
 root = tk.Tk()
@@ -45,6 +48,9 @@ ax.set_xlabel("Time (ms)")
 ax.set_ylabel("Angle (degrees)")
 init_threshold_line = ax.axhline(init_threshold, color='red', linestyle='--', label='Init Threshold')
 hit_threshold_line = ax.axhline(hit_threshold, color='green', linestyle='--', label='Hit Threshold')
+zero_line = ax.axvline(0, color='black', linestyle='--', label='Zero', linewidth=0.25)
+zero_line = ax.axhline(0, color='black', linestyle='--', label='Zero', linewidth=0.25)
+hit_duration_line = ax.axvline(hit_threshold, color='black', linestyle='--', label='Hit Duration', linewidth=0.25)
 ax.legend()
 
 # Create a Matplotlib canvas and add it to the right frame
@@ -75,6 +81,7 @@ def start_trial():
     hold_time = float(hold_time_entry.get())
     init_threshold_line.set_ydata([init_threshold, init_threshold])
     hit_threshold_line.set_ydata([hit_threshold, hit_threshold])
+    hit_duration_line.set_xdata([hit_duration * 1000, hit_duration * 1000])
     ax.legend()  # Update legend
     reset_trial_counts()  # Reset trial counts
     start_trials()  # Start the trials
@@ -105,29 +112,46 @@ running = False
 # Define an animation update function
 def animate(i):
     if running:
-        trial_logic(init_threshold, hit_duration, hit_threshold, iti, hold_time)
-
+#         trial_logic(init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration)
         # Check if in ITI period
         if is_in_iti_period():
             return
-
         angles = get_angles()
-        timestamps = get_timestamps()
+        
+        reference_time = get_reference_time()
+        
+        #this is an uncessary loop to fix, but good for testing purposes
+        timestamps = np.array(get_timestamps()) - reference_time * 1000
+        if len(timestamps) > len(angles):
+            timestamps = timestamps[:len(angles)]
+        elif len(angles) > len(timestamps):
+            angles = angles[:len(timestamps)]
         
         line.set_data(timestamps, angles)
-        if timestamps:
-            ax.set_xlim(timestamps[0], timestamps[-1])
-        if angles:
-            ax.set_ylim(min(angles) - 1, max(angles) + 1)  # Add some padding
-        canvas.draw()
         
+        if len(timestamps) > 0:
+#             ax.set_xlim(timestamps[0] - 1, timestamps[-1] + 1)
+            ax.set_xlim(-1000, max(timestamps[-1], hit_duration * 1000) + 1000)
+        if len(angles) > 0:
+            #ax.set_ylim(min(angles) - 1, max(angles) + 1)  # Add some padding
+            ax.set_ylim(min(min(angles), 0) -10, max(hit_threshold, max(angles)) + 10)  # Add some padding
+        canvas.draw()
         # Update trial counts
         num_trials, num_success = get_trial_counts()
         num_trials_label.config(text=f"Number of Trials: {num_trials}")
         num_success_label.config(text=f"Number of Success: {num_success}")
 
+def run_logic():
+    print("running logic")
+    while True:
+        trial_logic(init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration)
+        t.sleep(0.001)
+    
+
 # Create an animation
 ani = animation.FuncAnimation(fig, animate, interval=10)
+logic = threading.Thread(target=run_logic)
+logic.start()
 
 # Set button styles
 style = ttk.Style()
