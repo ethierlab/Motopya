@@ -1,0 +1,17 @@
+iniThreshold,1
+iniBaseline,1
+minDuration,1
+hitWindow,1
+hitThresh,1
+hitThreshAdapt,True
+hitThreshMin,1
+hitThreshMax,1
+leverGain,1
+forceDrop,1
+maxTrials,1
+holdTime,1
+holdTimeAdapt,True
+holdTimeMin,1
+holdTimeMax,1
+saveFolder,/home/ethier-lab/Documents/RatPull/Motopya/src
+ratID,1

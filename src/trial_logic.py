@@ -1,7 +1,8 @@
 import time
-from rotary_encoder import get_latest_angle, get_latest, get_angles, get_timestamps, clear_data, trial_start, set_trial_start, last_move_time
+from rotary_encoder import get_latest_angle, get_latest, get_angles, get_timestamps, get_data, clear_data, trial_start, set_trial_start, last_move_time
 import numpy as np
-
+from collections import deque
+import pandas as pd
 
 STATE_IDLE = 0
 STATE_TRIAL_INIT = 1 #probably not necessary
@@ -25,21 +26,45 @@ last_trial_end_time = None
 post_trial_start = None
 in_iti_period = False
 previous_angle = 0
+success = False
 
 # Trial counters
 num_trials = 0
 num_success = 0
+num_pellets = 0
 
 #Matplot usage
 reference_time = time.time()
+session_start = time.time()
+stop_session = False
+peak_value = 0
+successes = deque(maxlen=10)
 
-def trial_logic(init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration):
+session_hold_time = None
+session_hit_thresh = None
+trial_hold_time = None
+trial_hit_thresh = None
+
+trial_data = pd.DataFrame(columns=["timestamps", "angles"])
+trial_table = []
+
+session = {}
+
+
+def trial_logic(init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration, iniBaseline, session_duration, hit_thresh_adapt, hit_thresh_min, hit_thresh_max,
+    hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials, save_folder, ratID):
     global trial_started, trial_start_time, hit_start_time, last_move_time, last_trial_end_time, num_trials, num_success, in_iti_period,  trial_start, reference_time
-    global CURRENT_STATE, NEXT_STATE, post_trial_start, previous_angle
+    global CURRENT_STATE, NEXT_STATE, post_trial_start, previous_angle, peak_value, num_pellets, session_hold_time, session_hit_thresh, trial_hit_thresh, trial_hold_time, success
+    
+    session_hit_thresh = hit_threshold if session_hit_thresh is None else session_hit_thresh
+    session_hold_time = hold_time if session_hold_time is None else session_hold_time
+    trial_hit_thresh = hit_threshold if trial_hit_thresh is None else trial_hit_thresh
+    trial_hold_time = hold_time if trial_hold_time is None else trial_hold_time
     
     current_time = time.time()
     
     latest_angle, latest_time = get_latest()
+    peak_value = max(latest_angle, peak_value)
 #     print(latest_angle)
     last_move_time = current_time
     CURRENT_STATE = NEXT_STATE
@@ -47,7 +72,9 @@ def trial_logic(init_threshold, hit_duration, hit_threshold, iti, hold_time, pos
     # Check if trial should start
     if CURRENT_STATE == STATE_IDLE:
         reference_time = latest_time
-        if latest_angle >= init_threshold and previous_angle < init_threshold:
+        if time.time() - session_start > session_duration * 60 * 60 or num_trials >= max_trials or stop_session:
+            NEXT_STATE = STATE_SESSION_END   
+        elif latest_angle >= init_threshold and previous_angle < init_threshold:
             print(latest_angle, " ", previous_angle)
             trial_started = True
             trial_start_time = current_time
@@ -59,39 +86,62 @@ def trial_logic(init_threshold, hit_duration, hit_threshold, iti, hold_time, pos
 #         last_move_time = current_time
 
         # Check for trial timeout
-        if current_time - trial_start_time >= hit_duration:
+        if current_time - trial_start_time >= hit_duration and latest_angle < trial_hit_thresh:
+            print("time fail")
             NEXT_STATE = STATE_FAILURE
         # Check for hit threshold
-        elif latest_angle >= hit_threshold:
+        elif latest_angle <= peak_value - drop_tolerance:
+            print("drop fail")
+            NEXT_STATE = STATE_FAILURE
+        elif latest_angle >= trial_hit_thresh:
             hit_start_time = current_time
             NEXT_STATE = STATE_HOLD
     elif CURRENT_STATE == STATE_HOLD:
-        if latest_angle < hit_threshold:
+        if latest_angle < trial_hit_thresh:
             NEXT_STATE = STATE_TRIAL_STARTED
-        elif current_time - hit_start_time >= hold_time:
+        elif current_time - hit_start_time >= trial_hold_time:
             NEXT_STATE = STATE_SUCCESS
     elif CURRENT_STATE == STATE_SUCCESS:
         print("Success")
+        successes.append(True)
+        success = True
+        if get_average(successes) >= 0.7:
+            if hit_thresh_adapt:
+                trial_hit_thresh = min(hit_thresh_max, trial_hit_thresh + 10)
+            if hold_time_adapt:
+                trial_hold_time = min(hold_time_max, round(trial_hold_time + 0.1, 4))
         num_success += 1
+        num_pellets += 1
         NEXT_STATE = STATE_POST_TRIAL
     elif CURRENT_STATE == STATE_FAILURE:
         print("Fail")
+        success = False
+        successes.append(False)
+        if get_average(successes) <= 0.4:
+            if hit_thresh_adapt:
+                trial_hit_thresh = max(hit_thresh_min, trial_hit_thresh - 10)
+            if hold_time_adapt:
+                trial_hold_time = max(hold_time_min, round(trial_hold_time - 0.1, 4))
         NEXT_STATE = STATE_POST_TRIAL
     elif CURRENT_STATE == STATE_POST_TRIAL:
         if post_trial_start is None:
             print("POST")
             post_trial_start = current_time
         elif current_time - post_trial_start >= post_duration:
+            last_trial_end_time = current_time
+            record_trial(init_threshold, hit_threshold, hold_time, last_trial_end_time, success, peak_value)
+            peak_value = 0
             post_trial_start = None
             trial_started = False
             trial_start_time = None
             hit_start_time = None
-            last_trial_end_time = current_time
             NEXT_STATE = STATE_INTER_TRIAL
             print("Inter")
             in_iti_period = True
-            record_trial()
+            success = False
     elif CURRENT_STATE == STATE_INTER_TRIAL:
+        session_hit_thresh = trial_hit_thresh
+        session_hold_time = trial_hold_time
         if current_time - last_trial_end_time >= iti:
             clear_data()
             in_iti_period = False
@@ -99,10 +149,10 @@ def trial_logic(init_threshold, hit_duration, hit_threshold, iti, hold_time, pos
             print("IDLE")
     elif CURRENT_STATE == STATE_SESSION_END:
         print("Session is over")
-        
+    
     previous_angle = latest_angle
         
-    #     angles = get_angles()
+#     angles = get_angles()
 #     timestamps = get_timestamps()
     
     # Check for inactivity+--------------------------------------------------+
@@ -117,8 +167,8 @@ def is_in_iti_period():
     return in_iti_period
 
 def get_trial_counts():
-    global num_trials, num_success
-    return num_trials, num_success
+    global num_trials, num_success, num_pellets
+    return num_trials, num_success, num_pellets
 
 def reset_trial_counts():
     global num_trials, num_success
@@ -133,15 +183,80 @@ def get_reference_time():
     global reference_time
     return reference_time
     
-def record_trial():
+def record_trial(init_thresh, hit_thresh, hold_time, trial_end, success, peak_value):
 #     return
-    timestamps = np.array(get_timestamps()) - int(reference_time * 1000)
-    index = np.where(timestamps >= -1000)[0][0]
-    timestamps = timestamps[index:]
-    angles = get_angles()[index:]
-    timestamps = timestamps.tolist()
+    global trial_data, trial_table
+    trial_data = get_data()
+
+    trial = {}
+    trial["start_time"] = trial_start_time / 1000
+    trial["init_thresh"] = init_thresh
+    trial["hit_thresh"] = hit_thresh
+    trial["Force"] = trial_data
+    trial["hold_time"] = hold_time
+    trial["duration"] = trial_end / 1000
+    trial["success"] = success
+    trial["peak"] = peak_value
+
+    trial_table.append(trial)
+
+    session["Last_hit_thresh"] = hit_thresh
+    session["Last_hold_time"] = hold_time
+
+    # data = get_data()
+    # timestamps = np.array(data["timestamps"]) - int(reference_time * 1000)
+    # index = np.where(timestamps >= -1000)[0][0]
+    # timestamps = timestamps[index:]
+    # angles = data["angles"][index:]
+    # timestamps = timestamps.tolist()
     
-    zipped = list(zip(timestamps, angles))
+    # zipped = list(zip(timestamps, angles))
     # print(zipped)
 #     print(timestamps)
 #     print(angles)
+
+def feed():
+    global num_pellets
+    num_pellets += 1
+    return
+    
+def get_average(successes):
+    return sum(successes) / len(successes) if len(successes) > 0 else 0.5
+    
+def get_adapted_values():
+    return session_hit_thresh, session_hold_time
+    
+def reset():
+    global trial_started, trial_start_time, hit_start_time, last_trial_end_time, post_trial_start,in_iti_period, previous_angle
+    global num_trials, num_success, num_pellets
+    global reference_time, session_start, stop_session, peak_value, successes
+    global session_hold_time, session_hit_thresh
+    trial_started = False
+    trial_start_time = None
+    hit_start_time = None
+    last_trial_end_time = None
+    post_trial_start = None
+    in_iti_period = False
+    previous_angle = 0
+
+    # Trial counters
+    num_trials = 0
+    num_success = 0
+    num_pellets = 0
+
+    #Matplot usage
+    reference_time = time.time()
+    session_start = time.time()
+    stop_session = False
+    peak_value = 0
+    successes = deque(maxlen=10)
+
+    session_hold_time = None
+    session_hit_thresh = None
+    
+    CURRENT_STATE = NEXT_STATE = STATE_IDLE
+
+def get_trial_table():
+    global trial_table
+    return trial_table
+    

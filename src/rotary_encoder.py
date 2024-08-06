@@ -1,5 +1,6 @@
 from gpiozero import RotaryEncoder2
 import time
+import pandas as pd
 
 # Define the GPIO pins for the rotary encoder
 encoder_a = 24  # Example GPIO pin for A
@@ -7,6 +8,7 @@ encoder_b = 25  # Example GPIO pin for B
 
 # Global variables for the latest angle and timestamps
 latest_angle = 0
+data = pd.DataFrame(columns=["timestamps", "angles"])
 angles = []
 timestamps = []
 last_move_time = time.time()
@@ -24,15 +26,14 @@ def setup_encoder():
 #     encoder = RotaryEncoder(encoder_a, encoder_b, max_steps=360)
     encoder.when_rotated = rotary_changed
 def rotary_changed():
-    global latest_angle, last_move_time
+    global latest_angle, last_move_time, data
     latest_angle = encoder.steps   # Get the current angle with 0.5 degree resolution
     timestamp = int(time.time() * 1000)  # Get current time in milliseconds
-    angles.append(latest_angle)
-    timestamps.append(timestamp)
+    new_data = pd.DataFrame({"timestamps": [timestamp], "angles": [latest_angle]})
+    data = pd.concat([data, new_data], ignore_index = True)
     last_move_time = time.time()
-    if len(angles) > 1000:  # Keep the last 1000 data points
-        angles.pop(0)
-        timestamps.pop(0)
+    if len(data) > 3000:
+        data = data.iloc[-3000:]
 
 def get_latest_angle():
     return latest_angle
@@ -42,14 +43,18 @@ def get_latest():
 
 def get_angles():
     return angles
+    
+def get_data():
+    return data
 
 def get_timestamps():
     return timestamps
 
 def clear_data():
-    global angles, timestamps
+    global angles, timestamps, data
     angles.clear()
     timestamps.clear()
+    data = pd.DataFrame(columns=["timestamps", "angles"])
     
 def set_trial_start(start):
     global trial_start
