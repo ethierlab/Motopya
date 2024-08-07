@@ -17,6 +17,7 @@ from datetime import timedelta
 
 from rotary_encoder import setup_encoder, get_latest_angle, get_angles, get_timestamps, trial_start, get_trial_start, get_data
 from trial_logic import trial_logic, get_trial_counts, reset_trial_counts, is_in_iti_period, is_trial_started, get_reference_time, feed, get_adapted_values, reset, get_trial_table
+from trial_logic import get_last_values, initialize_session, get_session
 
 # Initialize trial parameters
 iniBaseline = 0
@@ -56,9 +57,6 @@ num_pellets = 0
 num_rewards = 0
 num_trials = 0
 
-
-
-trial_table = {}
 session = {}
 parameters = {}
 
@@ -275,7 +273,7 @@ Cadre2.grid_columnconfigure(1, pad=10, weight=1)
 Cadre2.grid_columnconfigure(2, pad=10, weight=1)
 Cadre2.grid_columnconfigure(3, pad=10, weight=1)
 timer_running = False
-session_paused = False
+_paused = False
 session_running = False
 
 def updateDisplayValues():
@@ -313,10 +311,7 @@ debut = t.time()
 def start():
     # Déclenche la session comportement
     global session_running, session, max_force, debut
-    current_datetime = datetime.now()
-    session["Start_time"] = current_datetime.strftime("%d-%B-%Y %H:%M:%S")
-    session["Initial_hit_thresh"] = parameters["hitThresh"].get()
-    session["Initial_hold_time"] = float(parameters["holdTime"].get()) * 1000
+    initialize_session(parameters["hitThresh"].get(), float(parameters["holdTime"].get()) * 1000)
 
     session_running = True
     startButton.config(text="PAUSE")
@@ -351,7 +346,6 @@ def toggle_start_button():
 
 
 def clear_stats():
-    trial_table.clear()
     session.clear()
     startButton.config(text="START")
     
@@ -567,7 +561,8 @@ def save_trial_table(filename):
             writer.writeheader()
             for trial in trial_table:
                 # Convert list of Force values to a string for CSV
-                trial["Force"] = ', '.join(map(str, trial["Force"]))
+                df_string = {"time, angle": ','.join(f"({row['timestamps']}, {row['angles']})" for _, row in trial["Force"].iterrows())}
+                trial["Force"] = df_string
                 writer.writerow(trial)
     except PermissionError:
         display("Cannot write to open file")
@@ -629,9 +624,7 @@ def save_results(crashed):
 #     np.savetxt(dir_target, sensorValueTrial, delimiter=",")
 
 def update_global_stats(filename):
-    global session
-    session["Number_trials"] = num_trials
-    session["Number_rewards"] = num_rewards
+    session = get_session()
 
     exists = os.path.isfile(filename)
     try:
