@@ -1,10 +1,12 @@
 import time
 from rotary_encoder import get_latest_angle, get_latest, get_angles, get_timestamps, get_data, clear_data, trial_start, set_trial_start, last_move_time
+from feeder import  gpio_feed
 import numpy as np
 from collections import deque
 import pandas as pd
 from datetime import datetime
 from datetime import timedelta
+import RPi.GPIO as GPIO
 
 STATE_IDLE = 0
 STATE_TRIAL_INIT = 1 #probably not necessary
@@ -239,6 +241,7 @@ def record_trial(init_thresh, hit_thresh, hold_time, trial_end, success, peak_va
 def feed():
     global num_pellets
     num_pellets += 1
+    gpio_feed()
     return
     
 def get_average(successes):
@@ -284,3 +287,4 @@ def get_trial_table():
 def get_session():
     global session
     return session
+

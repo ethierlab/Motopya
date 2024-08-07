@@ -9,8 +9,6 @@ encoder_b = 25  # Example GPIO pin for B
 # Global variables for the latest angle and timestamps
 latest_angle = 0
 data = pd.DataFrame(columns=["timestamps", "angles"])
-angles = []
-timestamps = []
 last_move_time = time.time()
 initial_time = None
 trial_start = time.time()
@@ -41,19 +39,11 @@ def get_latest_angle():
 def get_latest():
     return latest_angle, last_move_time
 
-def get_angles():
-    return angles
-    
 def get_data():
     return data
 
-def get_timestamps():
-    return timestamps
-
 def clear_data():
     global angles, timestamps, data
-    angles.clear()
-    timestamps.clear()
     data = pd.DataFrame(columns=["timestamps", "angles"])
     
 def set_trial_start(start):

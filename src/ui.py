@@ -1,5 +1,3 @@
-# This file can be created if further UI components need to be modularized.
-
 import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
@@ -17,19 +15,39 @@ import csv
 from datetime import datetime
 from datetime import timedelta
 
-# from main import start_trials, stop_trials
+
+
+# Initialize trial parameters
+iniBaseline = 0
+session_duration = 30
+init_threshold = 50
+hit_duration = 5
+hit_threshold = 100
+hold_time = 1
+post_duration = 1
+iti = 1
+hit_thresh_adapt = False
+hit_thresh_min = 0
+hit_thresh_max = 1000
+hold_time_adapt = False
+hold_time_min = 0
+hold_time_max = 1000
+lever_gain = 1
+drop_tolerance = 1000
+max_trials = 100
+save_folder = ""
+ratID = 1
+
+
+# Create the Tkinter application
+root = tk.Tk()
+root.title("Rotary Encoder Angle")
 
 # #_______________________________________________________________________________
 # GUI
 # création de l'interface avec titre et taille de la fenêtre
 
 # définition des valeurs modifiable par des entrés\
-# Create the Tkinter application
-root = tk.Tk()
-root.title("Rotary Encoder Angle")
-
-start_method = None
-stop_method = None
 
 session_running = False
 session_paused = False
@@ -37,15 +55,6 @@ num_pellets = 0
 num_rewards = 0
 num_trials = 0
 
-init_threshold = 50
-hit_duration = 5
-hit_threshold = 100
-hold_time = 1
-post_duration = 1
-iti = 1
-
-
-trial_table = {}
 session = {}
 parameters = {}
 
@@ -68,64 +77,7 @@ parameters["saveFolder"]  = tk.StringVar(root)
 parameters["ratID"] = tk.StringVar(root)
 parameters["iniBaseline"].set("1")
 
-def save_configuration():
-    global parameters
-    # top.withdraw()  # Hide the main window
-    saved_parameters = {}
-    for key, value in parameters.items():
-        saved_parameters[key] = value.get()
 
-
-
-    file_path = tk.filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
-    if not file_path:
-        return  # User canceled the dialog
-    
-    try:
-        with open(file_path, 'w', newline='') as csvfile:
-            writer = csv.writer(csvfile)
-            for key, value in saved_parameters.items():
-                writer.writerow([key, value])
-    except PermissionError:
-        display("Cannot write to open file")
-    
-
-    print("Configuration saved")
-    # top.deiconify()
-
-def load_parameters():
-    global parameters
-    file_path = tk.filedialog.askopenfilename()
-    directory = os.path.dirname(file_path)
-    try:
-        with open(file_path, 'r') as csvfile:
-            reader = csv.reader(csvfile)
-            for row in reader:
-                key, value = row
-                if key not in parameters.keys():
-                    print("That is not a configuration file." + str(key))
-                    return
-                parameters[key].set(value)
-            if bool(parameters["hitThreshAdapt"].get()):
-                min_thresh.config(state="normal")
-                max_thresh.config(state="normal")
-            else:
-                min_thresh.config(state="disabled")
-                max_thrsessionesh.config(state="disabled")
-            if bool(parameters["holdTimeAdapt"].get()):
-                min_time.config(state="normal")
-                max_time.config(state="normal")
-            else:
-                min_time.config(state="disabled")
-                max_time.config(state="disabled")
-    except: 
-        print("Error reading file.")
-        return
-    if not os.path.exists(parameters["saveFolder"].get()):
-        parameters["saveFolder"].set(directory)
-
-    print("Parameters loaded")
-    return parameters
 
 def set_text_bg(frame):
     # Get the background color of the frame
@@ -197,37 +149,29 @@ def is_boolean(value):
     
 
 def entry_changed(*args):
-    print("entry changed")
     global parameters
     parameters["iniBaseline"].set("1")
     startButton.config(state="disabled")
     for key, value in parameters.items():
         if not value.get() and not is_boolean(value.get()) and key not in ["saveFolder","holdTimeMin", "holdTimeMax", "hitThreshMax", "hitThreshMin"]:
-            print("False 1", key, value.get())
             return False
     #startButton.config(state="normal")
     for key, value in parameters.items():
         if key in ["leverGain", "holdTime", "hitThresh"] :
             if not is_positive_float(value.get()):
-                print("False 2", key, value.get())
                 return False
         elif key == "holdTimeAdapt":
             if not (is_boolean(value.get())):
-                print("False 3", key, value.get())
                 return False
             elif bool(value.get()) == True and not (is_positive_float(parameters["holdTimeMin"].get()) and is_positive_float(parameters["holdTimeMax"].get())):
-                print("False 4", key, value.get())
                 return False
         elif key == "hitThreshAdapt":
             if not (is_boolean(value.get())):
-                print("False 5", key, value.get())
                 return False
             elif bool(value.get()) == True and not (is_positive_float(parameters["hitThreshMin"].get()) and is_positive_float(parameters["hitThreshMax"].get())):
-                print("False 6", key, value.get())
                 return False
             
     startButton.config(state="normal")
-    print("True 2")
     return True
 
 for value in parameters.values():
@@ -270,22 +214,21 @@ Cadre2.grid_columnconfigure(1, pad=10, weight=1)
 Cadre2.grid_columnconfigure(2, pad=10, weight=1)
 Cadre2.grid_columnconfigure(3, pad=10, weight=1)
 timer_running = False
-session_paused = False
+_paused = False
 session_running = False
 
 def updateDisplayValues():
+    num_trials, num_rewards, num_pellets = get_trial_counts()
     Trials.config(text=str(num_trials))
     Rewards.config(text=str(num_rewards))
     Pellet.config(text=f"{num_pellets} ({round(num_pellets * 0.045, 3):.3f} g)")
     
 def resume():
-    global session_paused
-    global pause_time
+    global session_paused, pause_time, running
     session_paused = False
-    # sendArduino('c')
     print("setting thing to pause in resume")
     startButton.config(text="PAUSE")
-    # start()
+    running = True
 
 pause_start = t.time()
 pause_time = 0
@@ -307,10 +250,7 @@ debut = t.time()
 def start():
     # Déclenche la session comportement
     global session_running, session, max_force, debut
-    current_datetime = datetime.now()
-    session["Start_time"] = current_datetime.strftime("%d-%B-%Y %H:%M:%S")
-    session["Initial_hit_thresh"] = parameters["hitThresh"].get()
-    session["Initial_hold_time"] = float(parameters["holdTime"].get()) * 1000
+    initialize_session(parameters["hitThresh"].get(), float(parameters["holdTime"].get()) * 1000)
 
     session_running = True
     startButton.config(text="PAUSE")
@@ -327,7 +267,7 @@ def pause():
     startButton.config(text="RESUME")
 
 def toggle_start_button():
-    global start_method
+    
     # start_trial()
     
     global session_paused
@@ -339,14 +279,12 @@ def toggle_start_button():
         startButton.config(text="PAUSE")
         if not session_running:
             start()
-            # start_trial()
-            start_method()
+            start_trial()
         else:
             resume()
 
 
 def clear_stats():
-    trial_table.clear()
     session.clear()
     startButton.config(text="START")
     
@@ -357,9 +295,8 @@ def finish_up(crashed):
     clear_stats()
     
 def stop_Button():
-    global session_running, session_paused, stop_method
-    # stop_trials()
-    stop_method()
+    global session_running, session_paused
+    stop_trials()
     session_paused = False
     startButton.config(state="normal")
     startButton.config(text="START")
@@ -367,6 +304,7 @@ def stop_Button():
     finish_up(False)
     # stateList.clear()
     session_running = False
+    # reset()
     
 
 # Function to stop the trials
@@ -380,8 +318,7 @@ startButton.grid(row=0, column=0)
 stopButton = tk.Button(Cadre2, text="STOP", background='red', state=tk.DISABLED, command=stop_Button)
 stopButton.grid(row=0, column=1)
 # Function to feed a pellet
-def feed():
-    return
+
     
 feedButton = tk.Button(Cadre2, text="FEED", background='#798FD4', state=tk.NORMAL, command=feed)
 feedButton.grid(row=0, column=2)
@@ -553,7 +490,7 @@ def display(text):
     DisplayBox.config(text=text)
     
 def save_trial_table(filename):
-    global trial_table
+    trial_table = get_trial_table()
 
     try:
         with open(filename, mode='w', newline='') as csvfile:
@@ -563,7 +500,8 @@ def save_trial_table(filename):
             writer.writeheader()
             for trial in trial_table:
                 # Convert list of Force values to a string for CSV
-                trial["Force"] = ', '.join(map(str, trial["Force"]))
+                df_string = {"time, angle": ','.join(f"({row['timestamps']}, {row['angles']})" for _, row in trial["Force"].iterrows())}
+                trial["Force"] = df_string
                 writer.writerow(trial)
     except PermissionError:
         display("Cannot write to open file")
@@ -625,9 +563,7 @@ def save_results(crashed):
 #     np.savetxt(dir_target, sensorValueTrial, delimiter=",")
 
 def update_global_stats(filename):
-    global session
-    session["Number_trials"] = num_trials
-    session["Number_rewards"] = num_rewards
+    session = get_session()
 
     exists = os.path.isfile(filename)
     try:
@@ -642,24 +578,6 @@ def update_global_stats(filename):
     except PermissionError:
         display("Cannot write to open file")
     
-
-# Create the left frame for parameters
-# left_frame =  ttk.Frame(root, padding="10")
-# left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-# 
-# # Create the right frame for the plot and trial counts
-# right_frame =  ttk.Frame(root)
-# right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-# 
-# # Create a frame for the trial counts at the top of the right frame
-# trial_count_frame =  ttk.Frame(right_frame)
-# trial_count_frame.pack(side=tk.TOP, fill=tk.X, pady=10)
-# 
-# # Create Labels for the trial counts
-# num_trials_label = tk.Label(trial_count_frame, text="Number of Trials: 0")
-# num_trials_label.pack(side=tk.LEFT, padx=10)
-# num_success_label = tk.Label(trial_count_frame, text="Number of Success: 0")
-# num_success_label.pack(side=tk.LEFT, padx=10)
 
 # Create a Matplotlib figure and axis
 fig, ax = plt.subplots()
@@ -679,6 +597,122 @@ canvas = FigureCanvasTkAgg(fig, master=Cadre6)
 # canvas.get_tk_widget().pack(fill=tk.BOTH, expand=1)
 canvas.get_tk_widget().grid(row=1, column=1, columnspan=2, sticky='E', pady=2)
 
+# Create parameter input fields
+def create_parameter_input(frame, label, row, default_value):
+    tk.Label(frame, text=label).grid(row=row, column=0, sticky=tk.W, pady=2)
+    entry = ttk.Entry(frame)
+    entry.grid(row=row, column=1, pady=2)
+    entry.insert(0, str(default_value))
+    return entry
+
+# iti_entry = create_parameter_input(left_frame, "ITI (s):", 3, iti)
+
+# Start button
+
+def start_trial():
+    global init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration,iniBaseline, session_duration, hit_thresh_adapt, hit_thresh_min, hit_thresh_max
+    global hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials, save_folder, ratID
+    init_threshold = float(parameters["iniThreshold"].get())
+    hit_duration = float(parameters["hitWindow"].get())
+    hit_threshold = float(parameters["hitThresh"].get())
+    # iti = float(iti_entry.get())
+    hold_time = float(parameters["holdTime"].get())
+    init_threshold_line.set_ydata([init_threshold, init_threshold])
+    hit_threshold_line.set_ydata([hit_threshold, hit_threshold])
+    hit_duration_line.set_xdata([hit_duration * 1000, hit_duration * 1000])
+    iniBaseline = float(parameters["iniBaseline"].get())
+    session_duration = float(parameters["minDuration"].get())
+    post_duration = float(1)
+    hit_thresh_adapt = bool(parameters["hitThreshAdapt"].get())
+    hit_thresh_min = float(parameters["hitThreshMin"].get())
+    hit_thresh_max = float(parameters["hitThreshMax"].get())
+    hold_time_adapt = bool(parameters["holdTimeAdapt"].get())
+    hold_time_min = float(parameters["holdTimeMin"].get())
+    hold_time_max = float(parameters["holdTimeMax"].get())
+    lever_gain = float(parameters["leverGain"].get())
+    drop_tolerance = float(parameters["forceDrop"].get())
+    max_trials = float(parameters["maxTrials"].get())
+    save_folder = str(parameters["saveFolder"].get())
+    ratID = str(parameters["ratID"].get())
+
+
+    ax.legend()  # Update legend
+    # reset_trial_counts()  # Reset trial counts
+    start_trials()  # Start the trials
+    canvas.draw()
+
+
+# Set up the rotary encoder
+setup_encoder()
+
+# Initialize running state
+running = False
+
+# Define an animation update function
+def animate(i):
+    global hit_threshold, hold_time
+    if running:
+#         trial_logic(init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration)
+        # Check if in ITI period
+        if is_in_iti_period():
+            return
+        data = get_data()
+        
+        # angles = get_angles()
+        angles = np.array(data['angles'])
+        reference_time = get_reference_time()
+        adapted_threshold, adapted_time = get_adapted_values()
+        
+        if adapted_threshold != None and adapted_time != None:
+            hit_threshold = adapted_threshold
+            hold_time = adapted_time
+            parameters["hitThresh"].set(hit_threshold)
+            parameters["holdTime"].set(hold_time)
+            init_threshold_line.set_ydata([init_threshold, init_threshold])
+            hit_threshold_line.set_ydata([hit_threshold, hit_threshold])
+        
+        #this is an uncessary loop to fix, but good for testing purposes
+        # timestamps = np.array(get_timestamps()) - reference_time * 1000
+        timestamps = np.array(data['timestamps']) - reference_time * 1000
+        if len(timestamps) > len(angles):
+            timestamps = timestamps[:len(angles)]
+        elif len(angles) > len(timestamps):
+            angles = angles[:len(timestamps)]
+        
+        line.set_data(timestamps, angles)
+        
+        if len(timestamps) > 0:
+#             ax.set_xlim(timestamps[0] - 1, timestamps[-1] + 1)
+            ax.set_xlim(-1000, max(timestamps[-1], hit_duration * 1000) + 1000)
+        if len(angles) > 0:
+            #ax.set_ylim(min(angles) - 1, max(angles) + 1)  # Add some padding
+            ax.set_ylim( -10, max(hit_threshold, max(angles)) + 50)  # Add some padding
+        canvas.draw()
+        # Update trial counts
+        chronometer(debut)
+        updateDisplayValues()
+        # num_trials, num_success = get_trial_counts()
+        # num_trials_label.config(text=f"Number of Trials: {num_trials}")
+        # num_success_label.config(text=f"Number of Success: {num_success}")
+
+def run_logic():
+    global parameters
+    print("running logic")
+    while True:
+        if running:
+            trial_logic(init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration,iniBaseline, session_duration, hit_thresh_adapt, hit_thresh_min, hit_thresh_max,
+            hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials, save_folder, ratID)
+        else:
+            reset()
+
+        t.sleep(0.001)
+    
+
+# Create an animation
+ani = animation.FuncAnimation(fig, animate, interval=10)
+logic = threading.Thread(target=run_logic)
+logic.start()
+
 # Set button styles
 style = ttk.Style()
 style.configure("Start.TButton", foreground="green", font=("Helvetica", 12))
@@ -686,10 +720,4 @@ style.configure("Stop.TButton", foreground="red", font=("Helvetica", 12))
 
 # Start the Tkinter main loop
 # root.after(100, pause)  # Allow GPIOZero's pause function to run in the background
-
-
-def open_gui(start_method_main, stop_method_main):
-	global start_method, stop_method
-	start_method = start_method_main
-	stop_method = stop_method_main
-	root.mainloop()
+root.mainloop()
