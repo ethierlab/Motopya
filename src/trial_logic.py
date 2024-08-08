@@ -175,7 +175,7 @@ def trial_logic(init_threshold, hit_duration, hit_threshold, iti, hold_time, pos
             NEXT_STATE = STATE_IDLE
             print("IDLE")
     elif CURRENT_STATE == STATE_SESSION_END:
-        print("Session is over")
+        pass
     
     previous_angle = latest_angle
     

@@ -286,12 +286,33 @@ def run_logic():
 logic = threading.Thread(target=run_logic)
 logic.start()
 
+def is_running():
+    global running
+    return running
 def close():
     print("Closing")
-    global exit_program
+    global exit_program, running
+    running = False
     exit_program = True
     logic.join()
 
 # start_session_func, stop_session_func, feed_func, load_parameters_func, save_parameters_func, get_data_func, save_session_data_func
-start_gui(start_session, stop_session, feed, load_parameters, gui_save_parameters, get_data, save_session_data, is_in_iti_period, get_reference_time, get_adapted_values,
-          get_trial_counts, update_parameters, close)
+
+passed_functions = {
+    'start_session': start_session,
+    'stop_session': stop_session,
+    'feed': feed,
+    'load_parameters': load_parameters,
+    'gui_save_parameters': gui_save_parameters,
+    'get_data': get_data,
+    'save_session_data': save_session_data,
+    'is_in_iti_period': is_in_iti_period,
+    'get_reference_time': get_reference_time,
+    'get_adapted_values': get_adapted_values,
+    'get_trial_counts': get_trial_counts,
+    'update_parameters': update_parameters,
+    'close': close,
+    'is_running': is_running
+}
+
+start_gui(passed_functions)

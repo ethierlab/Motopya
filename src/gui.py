@@ -16,21 +16,6 @@ from datetime import datetime
 from datetime import timedelta
 import sys
 
-# Functions to be imported
-start_session = None
-stop_session = None
-feed = None
-load_parameters = None
-save_parameters = None
-get_data = None
-save_session_data = None
-is_in_iti_period = None
-get_reference_time = None
-get_adapted_values = None
-get_trial_counts = None
-update_parameters = None
-close = None
-
 
 # Initialize trial parameters
 iniBaseline = 0
@@ -69,7 +54,6 @@ session_paused = False
 num_pellets = 0
 num_rewards = 0
 num_trials = 0
-running = False
 
 session = {}
 parameters = {}
@@ -232,7 +216,7 @@ _paused = False
 session_running = False
 
 def updateDisplayValues():
-    num_trials, num_rewards, num_pellets = get_trial_counts()
+    num_trials, num_rewards, num_pellets = main_functions["get_trial_counts"]()
     Trials.config(text=str(num_trials))
     Rewards.config(text=str(num_rewards))
     Pellet.config(text=f"{num_pellets} ({round(num_pellets * 0.045, 3):.3f} g)")
@@ -260,7 +244,6 @@ def start_button():
     global session_running, session, max_force, debut, session_paused, running
     session_paused = False
     session_running = True
-    running = True
     debut = t.time()
     start_trial()
     
@@ -283,12 +266,10 @@ def resume_button():
 
 
     startButton.config(command=pause_button, text="PAUSE")
-    running = True
     
 def stop_button():
     global session_running, session_paused, running
-    running = False
-    stop_session()
+    main_functions["stop_session"]()
     session_paused = False
     startButton.config(state="normal",command=start_button, text="START")
     stopButton.config(state="disabled")
@@ -296,12 +277,12 @@ def stop_button():
     session_running = False
     
 def feed_button():
-    feed()
+    main_functions["feed"]()
 
 def load_parameters_button():
     global parameters
     file_path = tk.filedialog.askopenfilename()
-    success, message, parameters_list = load_parameters(file_path)
+    success, message, parameters_list = main_functions["load_parameters"](file_path)
     display(message)
     if not success:
         return
@@ -335,7 +316,7 @@ def save_parameters_button():
     
     parameters_list = get_parameters_list()
     
-    display(save_parameters(parameters_list, file_path))
+    display(main_functions["save_parameters"](parameters_list, file_path))
     
 
 def clear_stats():
@@ -532,7 +513,7 @@ def save_results(crashed):
     else:
         response = messagebox.askyesno("End of Session", "End of behavioral session\nSave results?")
     if response:
-        display((save_session_data())[1])
+        display((main_functions["save_session_data"]())[1])
     
 
 # Create a Matplotlib figure and axis
@@ -599,26 +580,26 @@ def start_trial():
     # reset_trial_counts()  # Reset trial counts
     
     
-    update_parameters(get_parameters_list())
+    main_functions["update_parameters"](get_parameters_list())
     
-    start_session()  # Start the trials
+    main_functions["start_session"]()  # Start the trials
     
     canvas.draw()
 
 
 # Define an animation update function
 def animate(i):
-    global hit_threshold, hold_time, running
+    global hit_threshold, hold_time
     updateDisplayValues()
-    if running:
+    if main_functions["is_running"]:
         # Check if in ITI period
-        if is_in_iti_period():
+        if main_functions["is_in_iti_period"]():
             return
-        data = get_data()
+        data = main_functions["get_data"]()
         
         angles = np.array(data['angles'])
-        reference_time = get_reference_time()
-        adapted_threshold, adapted_time = get_adapted_values()
+        reference_time = main_functions["get_reference_time"]()
+        adapted_threshold, adapted_time = main_functions["get_adapted_values"]()
         
         if adapted_threshold != None and adapted_time != None:
             hit_threshold = adapted_threshold
@@ -664,23 +645,15 @@ def animate(i):
 ani = None
 
 # starts the GUI and takes the necessary functions to call with buttons
-def start_gui(start_session_func, stop_session_func, feed_func, load_parameters_func, save_parameters_func, get_data_func, save_session_data_func, is_in_iti_period_func,
-              get_reference_time_func, get_adapted_values_func, get_trial_counts_func, update_parameters_func, close_func):
-    global start_session, stop_session, feed, load_parameters, save_parameters, get_data, save_session_data, is_in_iti_period, get_reference_time, get_adapted_values
-    global get_trial_counts, update_parameters, close, ani
-    start_session = start_session_func
-    stop_session = stop_session_func
-    feed = feed_func
-    load_parameters = load_parameters_func
-    save_parameters = save_parameters_func
-    get_data = get_data_func
-    save_session_data = save_session_data_func
-    is_in_iti_period = is_in_iti_period_func
-    get_reference_time = get_reference_time_func
-    get_adapted_values = get_adapted_values_func
-    get_trial_counts = get_trial_counts_func
-    update_parameters = update_parameters_func
-    close = close_func
+# start_session_func, stop_session_func, feed_func, load_parameters_func, save_parameters_func, get_data_func, save_session_data_func, is_in_iti_period_func,
+#               get_reference_time_func, get_adapted_values_func, get_trial_counts_func, update_parameters_func, close_func, is_running
+
+main_functions = {}
+
+def start_gui(passed_functions):
+    global ani, main_functions
+    main_functions = passed_functions
+
     # Create an animation
     ani = animation.FuncAnimation(fig, animate, interval=10, cache_frame_data=False)
 
@@ -691,10 +664,12 @@ def start_gui(start_session_func, stop_session_func, feed_func, load_parameters_
     return
 
 def on_closing():
-    global close, ani
-    ani.event_source.stop()
+    global ani
+    main_functions["close"]()
+#     ani.event_source.stop()
     root.quit()
     root.destroy()
-    close()
+    
+#     sys.exit()
     return
     
