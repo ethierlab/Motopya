@@ -14,7 +14,22 @@ from tkinter.filedialog import askopenfilename
 import csv
 from datetime import datetime
 from datetime import timedelta
+import sys
 
+# Functions to be imported
+start_session = None
+stop_session = None
+feed = None
+load_parameters = None
+save_parameters = None
+get_data = None
+save_session_data = None
+is_in_iti_period = None
+get_reference_time = None
+get_adapted_values = None
+get_trial_counts = None
+update_parameters = None
+close = None
 
 
 # Initialize trial parameters
@@ -54,6 +69,7 @@ session_paused = False
 num_pellets = 0
 num_rewards = 0
 num_trials = 0
+running = False
 
 session = {}
 parameters = {}
@@ -78,7 +94,6 @@ parameters["ratID"] = tk.StringVar(root)
 parameters["iniBaseline"].set("1")
 
 
-
 def set_text_bg(frame):
     # Get the background color of the frame
     bg_color = frame.cget("bg")
@@ -100,7 +115,6 @@ def set_text_bg(frame):
             
             
 def set_button_size(frame, width, height, font):
-
     for child in frame.winfo_children():
         if isinstance(child, (tk.Button)):
             child.config(width=width, height=height, font=font)
@@ -193,7 +207,7 @@ Cadre1.grid(row=1, column=1)
 
 
 # Boutons de tests_______________________________________________________________
-Title = tk.Label(Cadre1, text="Rat Pull Task", fg='black', justify=tk.CENTER, font=("bold", 25), padx=5, pady=25, width=11, height=1).grid(row=1, column=2)
+Title = tk.Label(Cadre1, text="Rat Knob Task", fg='black', justify=tk.CENTER, font=("bold", 25), padx=5, pady=25, width=11, height=1).grid(row=1, column=2)
 # lamp = UILamp(Cadre1, diameter=32)
 # lamp.grid(row=2, column=4)
 # Connect = tk.Button(Cadre1, text="Connect Device", command=connectArduino, width=13, font= ("Serif", 11, "bold")).grid(row=2, column=5)
@@ -222,13 +236,7 @@ def updateDisplayValues():
     Trials.config(text=str(num_trials))
     Rewards.config(text=str(num_rewards))
     Pellet.config(text=f"{num_pellets} ({round(num_pellets * 0.045, 3):.3f} g)")
-    
-def resume():
-    global session_paused, pause_time, running
-    session_paused = False
-    print("setting thing to pause in resume")
-    startButton.config(text="PAUSE")
-    running = True
+
 
 pause_start = t.time()
 pause_time = 0
@@ -247,45 +255,90 @@ def chronometer(debut):
         timer_clock.config(text=f"{hours:02}:{minutes:02}:{seconds:02}")
         
 debut = t.time()
-def start():
+def start_button():
     # Déclenche la session comportement
-    global session_running, session, max_force, debut
-    initialize_session(parameters["hitThresh"].get(), float(parameters["holdTime"].get()) * 1000)
-
+    global session_running, session, max_force, debut, session_paused, running
+    session_paused = False
     session_running = True
-    startButton.config(text="PAUSE")
-    stopButton.config(state="normal")
+    running = True
     debut = t.time()
+    start_trial()
+    
+    startButton.config(command=pause_button, text="PAUSE")
+    stopButton.config(state = "normal")
     
         
-def pause():
-    global session_paused
-    global pause_start
-    pause_start = t.time()
+def pause_button():
+    global session_paused, pause_start
+
     session_paused = True
+    pause_start = t.time()
     # sendArduino('c')
-    startButton.config(text="RESUME")
+    startButton.config(command=resume_button, text="RESUME")
+    
+    
+def resume_button():
+    global session_paused, pause_time, running
+    session_paused = False
 
-def toggle_start_button():
+
+    startButton.config(command=pause_button, text="PAUSE")
+    running = True
     
-    # start_trial()
+def stop_button():
+    global session_running, session_paused, running
+    running = False
+    stop_session()
+    session_paused = False
+    startButton.config(state="normal",command=start_button, text="START")
+    stopButton.config(state="disabled")
+    finish_up(False)
+    session_running = False
     
-    global session_paused
-    if not session_paused and session_running:
-        session_paused = True
-        pause()
+def feed_button():
+    feed()
+
+def load_parameters_button():
+    global parameters
+    file_path = tk.filedialog.askopenfilename()
+    success, message, parameters_list = load_parameters(file_path)
+    display(message)
+    if not success:
+        return
+    for i, key in enumerate(parameters):
+        parameters[key].set(parameters_list[i])
+        
+    if bool(parameters["hitThreshAdapt"].get()):
+        min_thresh.config(state="normal")
+        max_thresh.config(state="normal")
     else:
-        session_paused = False
-        startButton.config(text="PAUSE")
-        if not session_running:
-            start()
-            start_trial()
-        else:
-            resume()
-
+        min_thresh.config(state="disabled")
+        max_thresh.config(state="disabled")
+    if bool(parameters["holdTimeAdapt"].get()):
+        min_time.config(state="normal")
+        max_time.config(state="normal")
+    else:
+        min_time.config(state="disabled")
+        max_time.config(state="disabled")
+    
+        
+def get_parameters_list():
+    parameters_list = []
+    for i, key in enumerate(parameters):
+        parameters_list.append(parameters[key].get())
+    return parameters_list
+def save_parameters_button():
+    global parameters
+    file_path = tk.filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
+    if not file_path:
+        return  # User canceled the dialog
+    
+    parameters_list = get_parameters_list()
+    
+    display(save_parameters(parameters_list, file_path))
+    
 
 def clear_stats():
-    session.clear()
     startButton.config(text="START")
     
 
@@ -293,34 +346,15 @@ def finish_up(crashed):
     display('Session Ended')
     save_results(crashed)
     clear_stats()
-    
-def stop_Button():
-    global session_running, session_paused
-    stop_trials()
-    session_paused = False
-    startButton.config(state="normal")
-    startButton.config(text="START")
-    stopButton.config(state="disabled")
-    finish_up(False)
-    # stateList.clear()
-    session_running = False
-    # reset()
-    
 
-# Function to stop the trials
-def stop_trials():
-    global running
-    running = False
-
-startButton = tk.Button(Cadre2, text="START", background='#64D413', state=tk.DISABLED, command=lambda: toggle_start_button())
+startButton = tk.Button(Cadre2, text="START", background='#64D413', state=tk.DISABLED, command=lambda: start_button())
 startButton.grid(row=0, column=0)
 
-stopButton = tk.Button(Cadre2, text="STOP", background='red', state=tk.DISABLED, command=stop_Button)
+stopButton = tk.Button(Cadre2, text="STOP", background='red', state=tk.DISABLED, command=stop_button)
 stopButton.grid(row=0, column=1)
-# Function to feed a pellet
 
     
-feedButton = tk.Button(Cadre2, text="FEED", background='#798FD4', state=tk.NORMAL, command=feed)
+feedButton = tk.Button(Cadre2, text="FEED", background='#798FD4', state=tk.NORMAL, command=feed_button)
 feedButton.grid(row=0, column=2)
 
 removeOffsetButton = tk.Button(Cadre2, text='Remove\nOffset', state=tk.DISABLED)
@@ -402,7 +436,7 @@ Hit_window = tk.Label(Cadre5, text="Hit window (s):").grid(row=1, column=0)
 HW = tk.Entry(Cadre5, textvariable=parameters["hitWindow"]).grid(row=1, column=1)
 
 Duree = tk.Label(Cadre5, text="Max Duration (min):").grid(row=2, column=0)
-min = tk.Entry(Cadre5, textvariable=parameters["minDuration"]).grid(row=2, column=1)
+min_duration_entry = tk.Entry(Cadre5, textvariable=parameters["minDuration"]).grid(row=2, column=1)
 
 Lever_gain = tk.Label(Cadre5, text="Lever Gain :").grid(row=0, column=4, columnspan=2)
 Gain_entry = tk.Entry(Cadre5, textvariable=parameters["leverGain"]).grid(row=0, column=6)
@@ -454,10 +488,10 @@ HThresh = tk.Entry(Cadre5, textvariable=parameters["hitThresh"]).grid(row=4, col
 Hold_time = tk.Label(Cadre5, text="Hold time (s):").grid(row=5, column=0)
 HTime = tk.Entry(Cadre5, textvariable=parameters["holdTime"]).grid(row=5, column=1)
 
-loadParametersButton = tk.Button(Cadre5, text="Load", background='white', width=12, command=load_parameters)
+loadParametersButton = tk.Button(Cadre5, text="Load", background='white', width=12, command=load_parameters_button)
 loadParametersButton.grid(row=6, column=3, columnspan=2)
 
-saveConfigurationButton = tk.Button(Cadre5, text="Save", background='white', width=10, command=save_configuration)
+saveConfigurationButton = tk.Button(Cadre5, text="Save", background='white', width=10, command=save_parameters_button)
 saveConfigurationButton.grid(row=6, column=5, columnspan=2)
 
 set_text_bg(Cadre5)
@@ -479,8 +513,8 @@ Cadre7 =tk.Frame(CadreGauche)
 Cadre7.grid(row=4, column=1, sticky="n", pady=(20,20))
 
 
-typeButton = tk.Button(Cadre7, text='Toggle Input Type', command=lambda: toggle_input_type(root, 0))
-typeButton.grid(row=1, column=2)
+# typeButton = tk.Button(Cadre7, text='Toggle Input Type', command=lambda: toggle_input_type(root, 0))
+# typeButton.grid(row=1, column=2)
 
 # Label qui montre des messages
 DisplayBox = tk.Label(Cadre7, text="", font=("Serif", 12))
@@ -488,36 +522,6 @@ DisplayBox.grid(row=2, column=2, sticky="n", pady=(20,20))
 
 def display(text):
     DisplayBox.config(text=text)
-    
-def save_trial_table(filename):
-    trial_table = get_trial_table()
-
-    try:
-        with open(filename, mode='w', newline='') as csvfile:
-            fieldnames = ["start_time", "init_thresh", "hit_thresh", "Force", "hold_time", "duration", "success", "peak"]
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-
-            writer.writeheader()
-            for trial in trial_table:
-                # Convert list of Force values to a string for CSV
-                df_string = {"time, angle": ','.join(f"({row['timestamps']}, {row['angles']})" for _, row in trial["Force"].iterrows())}
-                trial["Force"] = df_string
-                writer.writerow(trial)
-    except PermissionError:
-        display("Cannot write to open file")
-
-def save_file(file_path, dict):
-    saved_parameters = {}
-    for key, value in dict.items():
-        saved_parameters[key] = value.get()
-
-    try:
-        with open(file_path, 'w', newline='') as csvfile:
-            writer = csv.writer(csvfile)
-            for key, value in saved_parameters.items():
-                writer.writerow([key, value])
-    except PermissionError:
-        display("Cannot write to open file")
 
 def save_results(crashed):
     # file_input_type = "_RatPull"
@@ -527,56 +531,8 @@ def save_results(crashed):
         response = messagebox.askyesno("Sorry about that...", "RatPull lever_pull_behavior Crashed!\nSave results?")
     else:
         response = messagebox.askyesno("End of Session", "End of behavioral session\nSave results?")
-    
-    rat_dir = os.path.join(parameters["saveFolder"].get(), str(parameters["ratID"].get()))
     if response:
-        dir_exists = os.path.exists(rat_dir)
-        if not dir_exists:
-            display(f'Creating new folder for animal parameters["ratID"].get()\n')
-            try:
-                dir_exists = True
-                os.mkdir(rat_dir)
-            except OSError:
-                dir_exists = False
-                display('Failed to create new folder in specified location')
-                
-            
-        
-        if dir_exists:
-            ttfname = parameters["ratID"].get() + file_input_type + '_trial_table_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.csv'
-            pfname = parameters["ratID"].get() + file_input_type + '_params_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.csv'
-            gfname = parameters["ratID"].get() + '_global_stats.csv'
-            save_trial_table(os.path.join(rat_dir, ttfname))
-            # save_file(os.join(rat_dir, ttfname), trial_table)
-            save_file(os.path.join(rat_dir, pfname), parameters)
-
-            display('Behavior stats and parameters saved successfully')
-            update_global_stats(os.path.join(rat_dir, gfname))
-        else:
-            display('Behavior stats and parameters NOT saved')
-    
-
-# def save_session():
-#     global sensorValueTrial
-#     global sensorTimeStamp
-#     dir_target = parameters["savefolder"].get()
-#     np.savetxt(dir_target, sensorValueTrial, delimiter=",")
-
-def update_global_stats(filename):
-    session = get_session()
-
-    exists = os.path.isfile(filename)
-    try:
-        with open(filename, mode='a', newline='') as csvfile:
-            fieldnames = ["Start_time", "Number_trials", "Number_rewards", "Initial_hit_thresh", "Last_hit_thresh", "Initial_hold_time", "Last_hold_time"]
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            if not exists:
-                print("writing header")
-                writer.writeheader()
-
-            writer.writerow(session)
-    except PermissionError:
-        display("Cannot write to open file")
+        display((save_session_data())[1])
     
 
 # Create a Matplotlib figure and axis
@@ -635,30 +591,31 @@ def start_trial():
     save_folder = str(parameters["saveFolder"].get())
     ratID = str(parameters["ratID"].get())
 
+    init_threshold_line.set_ydata([init_threshold, init_threshold])
+    hit_threshold_line.set_ydata([hit_threshold, hit_threshold])
+    hit_duration_line.set_xdata([hit_duration * 1000, hit_duration * 1000])
 
     ax.legend()  # Update legend
     # reset_trial_counts()  # Reset trial counts
-    start_trials()  # Start the trials
+    
+    
+    update_parameters(get_parameters_list())
+    
+    start_session()  # Start the trials
+    
     canvas.draw()
 
 
-# Set up the rotary encoder
-setup_encoder()
-
-# Initialize running state
-running = False
-
 # Define an animation update function
 def animate(i):
-    global hit_threshold, hold_time
+    global hit_threshold, hold_time, running
+    updateDisplayValues()
     if running:
-#         trial_logic(init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration)
         # Check if in ITI period
         if is_in_iti_period():
             return
         data = get_data()
         
-        # angles = get_angles()
         angles = np.array(data['angles'])
         reference_time = get_reference_time()
         adapted_threshold, adapted_time = get_adapted_values()
@@ -671,53 +628,73 @@ def animate(i):
             init_threshold_line.set_ydata([init_threshold, init_threshold])
             hit_threshold_line.set_ydata([hit_threshold, hit_threshold])
         
-        #this is an uncessary loop to fix, but good for testing purposes
-        # timestamps = np.array(get_timestamps()) - reference_time * 1000
+        # this is an uncessary loop that needs to be fixed, but good for testing purposes
         timestamps = np.array(data['timestamps']) - reference_time * 1000
+        
+        
+        
         if len(timestamps) > len(angles):
             timestamps = timestamps[:len(angles)]
         elif len(angles) > len(timestamps):
             angles = angles[:len(timestamps)]
         
-        line.set_data(timestamps, angles)
+        
         
         if len(timestamps) > 0:
-#             ax.set_xlim(timestamps[0] - 1, timestamps[-1] + 1)
             ax.set_xlim(-1000, max(timestamps[-1], hit_duration * 1000) + 1000)
+            timestamps = np.append(timestamps, (t.time() - reference_time) * 1000)
         if len(angles) > 0:
-            #ax.set_ylim(min(angles) - 1, max(angles) + 1)  # Add some padding
             ax.set_ylim( -10, max(hit_threshold, max(angles)) + 50)  # Add some padding
+            angles = np.append(angles, angles[-1])
+        line.set_data(timestamps, angles)
         canvas.draw()
         # Update trial counts
         chronometer(debut)
-        updateDisplayValues()
-        # num_trials, num_success = get_trial_counts()
-        # num_trials_label.config(text=f"Number of Trials: {num_trials}")
-        # num_success_label.config(text=f"Number of Success: {num_success}")
-
-def run_logic():
-    global parameters
-    print("running logic")
-    while True:
-        if running:
-            trial_logic(init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration,iniBaseline, session_duration, hit_thresh_adapt, hit_thresh_min, hit_thresh_max,
-            hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials, save_folder, ratID)
-        else:
-            reset()
-
-        t.sleep(0.001)
+    
     
 
-# Create an animation
-ani = animation.FuncAnimation(fig, animate, interval=10)
-logic = threading.Thread(target=run_logic)
-logic.start()
+
+
 
 # Set button styles
-style = ttk.Style()
-style.configure("Start.TButton", foreground="green", font=("Helvetica", 12))
-style.configure("Stop.TButton", foreground="red", font=("Helvetica", 12))
+# style = ttk.Style()
+# style.configure("Start.TButton", foreground="green", font=("Helvetica", 12))
+# style.configure("Stop.TButton", foreground="red", font=("Helvetica", 12))
 
-# Start the Tkinter main loop
-# root.after(100, pause)  # Allow GPIOZero's pause function to run in the background
-root.mainloop()
+ani = None
+
+# starts the GUI and takes the necessary functions to call with buttons
+def start_gui(start_session_func, stop_session_func, feed_func, load_parameters_func, save_parameters_func, get_data_func, save_session_data_func, is_in_iti_period_func,
+              get_reference_time_func, get_adapted_values_func, get_trial_counts_func, update_parameters_func, close_func):
+    global start_session, stop_session, feed, load_parameters, save_parameters, get_data, save_session_data, is_in_iti_period, get_reference_time, get_adapted_values
+    global get_trial_counts, update_parameters, close, ani
+    start_session = start_session_func
+    stop_session = stop_session_func
+    feed = feed_func
+    load_parameters = load_parameters_func
+    save_parameters = save_parameters_func
+    get_data = get_data_func
+    save_session_data = save_session_data_func
+    is_in_iti_period = is_in_iti_period_func
+    get_reference_time = get_reference_time_func
+    get_adapted_values = get_adapted_values_func
+    get_trial_counts = get_trial_counts_func
+    update_parameters = update_parameters_func
+    close = close_func
+    # Create an animation
+    ani = animation.FuncAnimation(fig, animate, interval=10, cache_frame_data=False)
+
+    # Start the Tkinter main loop
+    # root.after(100, pause)  # Allow GPIOZero's pause function to run in the background
+    root.protocol("WM_DELETE_WINDOW", on_closing)
+    root.mainloop()
+    return
+
+def on_closing():
+    global close, ani
+    ani.event_source.stop()
+    root.quit()
+    root.destroy()
+    close()
+    return
+    

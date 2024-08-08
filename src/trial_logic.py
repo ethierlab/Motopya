@@ -1,5 +1,5 @@
 import time
-from rotary_encoder import get_latest_angle, get_latest, get_angles, get_timestamps, get_data, clear_data, trial_start, set_trial_start, last_move_time
+from rotary_encoder import get_latest_angle, get_latest, get_data, clear_data, trial_start, set_trial_start, last_move_time
 from feeder import  gpio_feed
 import numpy as np
 from collections import deque
@@ -31,6 +31,7 @@ post_trial_start = None
 in_iti_period = False
 previous_angle = 0
 success = False
+reset_data = False
 
 # Trial counters
 num_trials = 0
@@ -74,7 +75,7 @@ def trial_logic(init_threshold, hit_duration, hit_threshold, iti, hold_time, pos
     hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials, save_folder, ratID):
     global trial_started, trial_start_time, hit_start_time, last_move_time, last_trial_end_time, num_trials, num_success, in_iti_period,  trial_start, reference_time
     global CURRENT_STATE, NEXT_STATE, post_trial_start, previous_angle, peak_value, num_pellets, session_hold_time, session_hit_thresh, trial_hit_thresh, trial_hold_time, success
-    global last_hit_thresh, last_hold_time
+    global last_hit_thresh, last_hold_time, reset_data
     
     
     session_hit_thresh = hit_threshold if session_hit_thresh is None else session_hit_thresh
@@ -177,6 +178,12 @@ def trial_logic(init_threshold, hit_duration, hit_threshold, iti, hold_time, pos
         print("Session is over")
     
     previous_angle = latest_angle
+    
+    
+    
+    if reset_data:
+        reset_data = False
+        reset_stats()
         
 #     angles = get_angles()
 #     timestamps = get_timestamps()
@@ -242,6 +249,7 @@ def feed():
     global num_pellets
     num_pellets += 1
     gpio_feed()
+    print("fed")
     return
     
 def get_average(successes):
@@ -251,10 +259,18 @@ def get_adapted_values():
     return session_hit_thresh, session_hold_time
     
 def reset():
+    global reset_data
+    reset_data = True
+    
+def reset_stats():
     global trial_started, trial_start_time, hit_start_time, last_trial_end_time, post_trial_start,in_iti_period, previous_angle
     global num_trials, num_success, num_pellets
     global reference_time, session_start, stop_session, peak_value, successes
     global session_hold_time, session_hit_thresh
+    
+    CURRENT_STATE = NEXT_STATE = STATE_IDLE
+    
+    
     trial_started = False
     trial_start_time = None
     hit_start_time = None
@@ -277,8 +293,6 @@ def reset():
 
     session_hold_time = None
     session_hit_thresh = None
-    
-    CURRENT_STATE = NEXT_STATE = STATE_IDLE
 
 def get_trial_table():
     global trial_table
