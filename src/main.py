@@ -8,7 +8,7 @@ import csv
 from datetime import datetime
 from datetime import timedelta
 
-from rotary_encoder import setup_encoder, get_latest_angle, trial_start, get_trial_start, get_data
+from rotary_encoder import setup_encoder, get_latest_angle, get_data
 from trial_logic import trial_logic, get_trial_counts, reset_trial_counts, is_in_iti_period, is_trial_started, get_reference_time, feed, get_adapted_values, reset, get_trial_table
 from trial_logic import get_last_values, initialize_session, get_session
 from gui import start_gui
@@ -66,10 +66,8 @@ def gui_save_parameters(parameters_list, file_path):
     return save_parameters(file_path)
 
 def update_parameters(parameters_list):
-    print("updating parameters")
     for i, key in enumerate(parameters):
         parameters[key] = parameters_list[i]
-        print(parameters_list[i])
         
 def save_parameters(file_path):
     global parameters
@@ -99,7 +97,6 @@ def load_parameters(file_path):
             reader = csv.reader(csvfile)
             for row in reader:
                 key, value = row
-                print(key, value)
                 if key not in parameters.keys():
                     message = "That is not a configuration file." + str(key)
                     return False, message, list(parameters.values())
@@ -303,7 +300,7 @@ passed_functions = {
     'stop_session': stop_session,
     'feed': feed,
     'load_parameters': load_parameters,
-    'gui_save_parameters': gui_save_parameters,
+    'save_parameters': gui_save_parameters,
     'get_data': get_data,
     'save_session_data': save_session_data,
     'is_in_iti_period': is_in_iti_period,

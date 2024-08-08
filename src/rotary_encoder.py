@@ -11,7 +11,6 @@ latest_angle = 0
 data = pd.DataFrame(columns=["timestamps", "angles"])
 last_move_time = time.time()
 initial_time = None
-trial_start = time.time()
 
 # Set up the rotary encoder
 encoder = None
@@ -19,7 +18,6 @@ encoder = None
 def setup_encoder():
     global encoder, initial_time
     initial_time = time.time()
-    # trial_start = time.time()
     encoder = RotaryEncoder2(encoder_a, encoder_b, max_steps=360,half_step=False)
 #     encoder = RotaryEncoder(encoder_a, encoder_b, max_steps=360)
     encoder.when_rotated = rotary_changed
@@ -45,11 +43,3 @@ def get_data():
 def clear_data():
     global angles, timestamps, data
     data = pd.DataFrame(columns=["timestamps", "angles"])
-    
-def set_trial_start(start):
-    global trial_start
-    print("setting trial start time")
-    trial_start = start
-    
-def get_trial_start():
-    return trial_start

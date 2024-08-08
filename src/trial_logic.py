@@ -1,5 +1,5 @@
 import time
-from rotary_encoder import get_latest_angle, get_latest, get_data, clear_data, trial_start, set_trial_start, last_move_time
+from rotary_encoder import get_latest_angle, get_latest, get_data, clear_data, last_move_time
 from feeder import  gpio_feed
 import numpy as np
 from collections import deque
@@ -87,7 +87,6 @@ def trial_logic(init_threshold, hit_duration, hit_threshold, iti, hold_time, pos
     
     latest_angle, latest_time = get_latest()
     peak_value = max(latest_angle, peak_value)
-#     print(latest_angle)
     last_move_time = current_time
     CURRENT_STATE = NEXT_STATE
     
@@ -97,7 +96,6 @@ def trial_logic(init_threshold, hit_duration, hit_threshold, iti, hold_time, pos
         if time.time() - session_start > session_duration * 60 * 60 or num_trials >= max_trials or stop_session:
             NEXT_STATE = STATE_SESSION_END   
         elif latest_angle >= init_threshold and previous_angle < init_threshold:
-            print(latest_angle, " ", previous_angle)
             trial_started = True
             trial_start_time = current_time
             num_trials += 1
@@ -249,7 +247,6 @@ def feed():
     global num_pellets
     num_pellets += 1
     gpio_feed()
-    print("fed")
     return
     
 def get_average(successes):

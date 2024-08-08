@@ -39,6 +39,8 @@ save_folder = ""
 ratID = 1
 
 
+canClose = True
+
 # Create the Tkinter application
 root = tk.Tk()
 root.title("Rotary Encoder Angle")
@@ -280,8 +282,12 @@ def feed_button():
     main_functions["feed"]()
 
 def load_parameters_button():
-    global parameters
+    global parameters, canClose
+    canClose = False
     file_path = tk.filedialog.askopenfilename()
+    canClose = True
+    if not file_path:
+        return  # User canceled the dialog
     success, message, parameters_list = main_functions["load_parameters"](file_path)
     display(message)
     if not success:
@@ -309,8 +315,10 @@ def get_parameters_list():
         parameters_list.append(parameters[key].get())
     return parameters_list
 def save_parameters_button():
-    global parameters
+    global parameters, canClose
+    canClose = False
     file_path = tk.filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
+    canClose = True
     if not file_path:
         return  # User canceled the dialog
     
@@ -628,12 +636,13 @@ def animate(i):
             ax.set_ylim( -10, max(hit_threshold, max(angles)) + 50)  # Add some padding
             angles = np.append(angles, angles[-1])
         line.set_data(timestamps, angles)
-        canvas.draw()
+        try:
+            canvas.draw()
+        except:
+            pass
         # Update trial counts
         chronometer(debut)
     
-    
-
 
 
 
@@ -645,8 +654,6 @@ def animate(i):
 ani = None
 
 # starts the GUI and takes the necessary functions to call with buttons
-# start_session_func, stop_session_func, feed_func, load_parameters_func, save_parameters_func, get_data_func, save_session_data_func, is_in_iti_period_func,
-#               get_reference_time_func, get_adapted_values_func, get_trial_counts_func, update_parameters_func, close_func, is_running
 
 main_functions = {}
 
@@ -665,11 +672,12 @@ def start_gui(passed_functions):
 
 def on_closing():
     global ani
+    if not canClose:
+        return
+    main_functions["stop_session"]()
     main_functions["close"]()
 #     ani.event_source.stop()
     root.quit()
     root.destroy()
-    
-#     sys.exit()
     return
     
