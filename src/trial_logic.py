@@ -1,4 +1,4 @@
-import time
+import time as t
 from rotary_encoder import get_latest_angle, get_latest, get_data, clear_data, last_move_time
 from feeder import  gpio_feed
 import numpy as np
@@ -39,8 +39,8 @@ num_success = 0
 num_pellets = 0
 
 #Matplot usage
-reference_time = time.time()
-session_start = time.time()
+reference_time = t.time()
+session_start = t.time()
 stop_session = False
 peak_value = 0
 successes = deque(maxlen=10)
@@ -72,7 +72,7 @@ def initialize_session(hit_thresh, hold_time):
 
 
 def trial_logic(init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration, iniBaseline, session_duration, hit_thresh_adapt, hit_thresh_min, hit_thresh_max,
-    hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials, save_folder, ratID):
+    hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials):
     global trial_started, trial_start_time, hit_start_time, last_move_time, last_trial_end_time, num_trials, num_success, in_iti_period,  trial_start, reference_time
     global CURRENT_STATE, NEXT_STATE, post_trial_start, previous_angle, peak_value, num_pellets, session_hold_time, session_hit_thresh, trial_hit_thresh, trial_hold_time, success
     global last_hit_thresh, last_hold_time, reset_data
@@ -83,7 +83,7 @@ def trial_logic(init_threshold, hit_duration, hit_threshold, iti, hold_time, pos
     trial_hit_thresh = hit_threshold if trial_hit_thresh is None else trial_hit_thresh
     trial_hold_time = hold_time if trial_hold_time is None else trial_hold_time
     
-    current_time = time.time()
+    current_time = t.time()
     
     latest_angle, latest_time = get_latest()
     peak_value = max(latest_angle, peak_value)
@@ -93,7 +93,7 @@ def trial_logic(init_threshold, hit_duration, hit_threshold, iti, hold_time, pos
     # Check if trial should start
     if CURRENT_STATE == STATE_IDLE:
         reference_time = latest_time
-        if time.time() - session_start > session_duration * 60 * 60 or num_trials >= max_trials or stop_session:
+        if t.time() - session_start > session_duration * 60 * 60 or num_trials >= max_trials or stop_session:
             NEXT_STATE = STATE_SESSION_END   
         elif latest_angle >= init_threshold and previous_angle < init_threshold:
             trial_started = True
@@ -282,8 +282,8 @@ def reset_stats():
     num_pellets = 0
 
     #Matplot usage
-    reference_time = time.time()
-    session_start = time.time()
+    reference_time = t.time()
+    session_start = t.time()
     stop_session = False
     peak_value = 0
     successes = deque(maxlen=10)

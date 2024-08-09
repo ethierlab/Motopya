@@ -275,7 +275,7 @@ def run_logic():
     while True:
         if running:
             trial_logic(init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration,iniBaseline, session_duration, hit_thresh_adapt, hit_thresh_min, hit_thresh_max,
-            hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials, save_folder, ratID)
+            hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials)
         elif exit_program:
             break
         t.sleep(0.001)

@@ -232,7 +232,7 @@ def chronometer(debut):
     if (session_paused):
         pause_time += t.time() - pause_start
         pause_start = t.time()
-    else:
+    elif main_functions["is_running"]():
         chrono_sec = t.time() - debut - pause_time
         chrono_timeLapse = timedelta(seconds=chrono_sec)
         hours, remainder = divmod(chrono_timeLapse.seconds, 3600)
@@ -599,7 +599,7 @@ def start_trial():
 def animate(i):
     global hit_threshold, hold_time
     updateDisplayValues()
-    if main_functions["is_running"]:
+    if main_functions["is_running"]():
         # Check if in ITI period
         if main_functions["is_in_iti_period"]():
             return
