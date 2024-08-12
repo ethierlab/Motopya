@@ -3,6 +3,8 @@
 RatTaskPyRaspPi/spidev-test/
 RatTaskPyRaspPi/Deprecated_files/ads1015_python
 
+src/output
+src/parameters
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
