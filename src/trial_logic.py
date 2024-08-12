@@ -99,6 +99,7 @@ def trial_logic(init_threshold, hit_duration, hit_threshold, iti, hold_time, pos
             trial_started = True
             trial_start_time = current_time
             num_trials += 1
+            peak_value = 0
             print("Trial started")
             NEXT_STATE = STATE_TRIAL_STARTED
     elif CURRENT_STATE == STATE_TRIAL_STARTED:
@@ -111,7 +112,7 @@ def trial_logic(init_threshold, hit_duration, hit_threshold, iti, hold_time, pos
             NEXT_STATE = STATE_FAILURE
         # Check for hit threshold
         elif latest_angle <= peak_value - drop_tolerance:
-            print("drop fail")
+            print("drop fail  ", peak_value)
             NEXT_STATE = STATE_FAILURE
         elif latest_angle >= trial_hit_thresh:
             hit_start_time = current_time
@@ -152,7 +153,6 @@ def trial_logic(init_threshold, hit_duration, hit_threshold, iti, hold_time, pos
         elif current_time - post_trial_start >= post_duration:
             
             record_trial(init_threshold, hit_threshold, hold_time, last_trial_end_time, success, peak_value)
-            peak_value = 0
             post_trial_start = None
             trial_started = False
             trial_start_time = None
