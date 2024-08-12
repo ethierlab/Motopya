@@ -179,7 +179,7 @@ def save_file(file_path, dict):
 
 def save_session_data():
     file_input_type = "_RatKnob"
-    rat_dir = os.path.join(parameters["saveFolder"], str(parameters["ratID"]))
+    rat_dir = os.path.join(parameters["saveFolder"], "output_files", str(parameters["ratID"]))
     dir_exists = os.path.exists(rat_dir)
     message = ""
     if not dir_exists:
