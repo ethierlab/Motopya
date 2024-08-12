@@ -598,13 +598,12 @@ def start_trial():
 # Define an animation update function
 def animate(i):
     global hit_threshold, hold_time
-    updateDisplayValues()
     if main_functions["is_running"]():
+        updateDisplayValues()
         # Check if in ITI period
         if main_functions["is_in_iti_period"]():
             return
         data = main_functions["get_data"]()
-        
         angles = np.array(data['angles'])
         reference_time = main_functions["get_reference_time"]()
         adapted_threshold, adapted_time = main_functions["get_adapted_values"]()
@@ -618,7 +617,9 @@ def animate(i):
             hit_threshold_line.set_ydata([hit_threshold, hit_threshold])
         
         # this is an uncessary loop that needs to be fixed, but good for testing purposes
-        timestamps = np.array(data['timestamps']) - reference_time * 1000
+#         print(reference_time)
+#         timestamps = np.array(data['timestamps']) - reference_time * 1000
+        timestamps = data['timestamps'].values - reference_time * 1000
         
         
         
@@ -674,7 +675,6 @@ def on_closing():
     global ani
     if not canClose:
         return
-    main_functions["stop_session"]()
     main_functions["close"]()
 #     ani.event_source.stop()
     root.quit()

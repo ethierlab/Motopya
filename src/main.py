@@ -11,7 +11,13 @@ from datetime import timedelta
 from rotary_encoder import setup_encoder, get_latest_angle, get_data
 from trial_logic import trial_logic, get_trial_counts, reset_trial_counts, is_in_iti_period, is_trial_started, get_reference_time, feed, get_adapted_values, reset, get_trial_table
 from trial_logic import get_last_values, initialize_session, get_session
+from session_w_trial import Session
 from gui import start_gui
+
+
+#Initialize Session object
+
+session = None
 
 # Initialize trial parameters
 iniBaseline = 0
@@ -40,7 +46,7 @@ num_pellets = 0
 num_rewards = 0
 num_trials = 0
 
-session = {}
+# session_info = {}
 parameters = {}
 
 parameters["iniThreshold"] = 1 #0
@@ -113,7 +119,7 @@ def load_parameters(file_path):
     return True, message, list(parameters.values())
 
 timer_running = False
-_paused = False
+session_paused = False
 session_running = False
     
 def resume():
@@ -143,7 +149,10 @@ def pause():
 # Function to stop the trials
 def stop_session():
     print("stopping session")
-    global running
+    global running, session
+    if session != None:
+        session.stop()
+    session = None
     running = False
     reset()
     
@@ -223,19 +232,18 @@ def update_global_stats(filename):
             writer.writerow(session)
     except PermissionError:
         print("Cannot write to open file")
-    
 
+session_thread = None
 
-# Create parameter input fields
-def create_parameter_input(frame, label, row, default_value):
-    tk.Label(frame, text=label).grid(row=row, column=0, sticky=tk.W, pady=2)
-    entry = ttk.Entry(frame)
-    entry.grid(row=row, column=1, pady=2)
-    entry.insert(0, str(default_value))
-    return entry
-
+def run_session():
+    print("running session")
+    if session != None:
+        session.start()
 # Function to start the trials
 def start_session():
+    global session, session_thread
+
+    
     global running
     global init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration,iniBaseline, session_duration, hit_thresh_adapt, hit_thresh_min, hit_thresh_max
     global hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials, save_folder, ratID
@@ -243,6 +251,7 @@ def start_session():
     hit_duration = float(parameters["hitWindow"])
     hit_threshold = float(parameters["hitThresh"])
     # iti = float(iti_entry)
+    iti = 1
     hold_time = float(parameters["holdTime"])
     iniBaseline = float(parameters["iniBaseline"])
     session_duration = float(parameters["minDuration"])
@@ -259,6 +268,13 @@ def start_session():
     save_folder = str(parameters["saveFolder"])
     ratID = str(parameters["ratID"])
     
+    session = Session(init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration, iniBaseline, session_duration, hit_thresh_adapt, hit_thresh_min, hit_thresh_max,
+        hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials)
+#     if session_thread != None:
+#         session_thread.join()
+#     session_thread = threading.Thread(target=run_session)
+#     session_thread.start()
+    print("here2")
     initialize_session(float(parameters["hitThresh"]), float(parameters["holdTime"]) * 1000)
     
     running = True
@@ -269,19 +285,21 @@ setup_encoder()
 # Initialize running state
 running = False
 exit_program = False
+
 def run_logic():
-    global parameters
+    global parameters, session
     print("running logic")
     while True:
-        if running:
-            trial_logic(init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration,iniBaseline, session_duration, hit_thresh_adapt, hit_thresh_min, hit_thresh_max,
-            hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials)
-        elif exit_program:
+        if running and session != None and not session.is_running() and not session.is_done():
+            print("starting session")
+            session.start()
+#             trial_logic(init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration,iniBaseline, session_duration, hit_thresh_adapt, hit_thresh_min, hit_thresh_max,
+#             hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials)
+        if exit_program:
             break
         t.sleep(0.001)
         
-logic = threading.Thread(target=run_logic)
-logic.start()
+logic = None
 
 def is_running():
     global running
@@ -289,10 +307,23 @@ def is_running():
 def close():
     print("Closing")
     global exit_program, running
+    stop_session()
     running = False
     exit_program = True
-    logic.join()
+    if logic:
+        logic.join()
+    
+def get_reference():
+    return session.get_reference_time()
 
+def get_adapted():
+    return session.get_adapted_values()
+
+def get_counts():
+    return session.get_trial_counts()
+
+def in_iti():
+    return session.is_in_iti_period()
 # start_session_func, stop_session_func, feed_func, load_parameters_func, save_parameters_func, get_data_func, save_session_data_func
 
 passed_functions = {
@@ -303,13 +334,24 @@ passed_functions = {
     'save_parameters': gui_save_parameters,
     'get_data': get_data,
     'save_session_data': save_session_data,
-    'is_in_iti_period': is_in_iti_period,
-    'get_reference_time': get_reference_time,
-    'get_adapted_values': get_adapted_values,
-    'get_trial_counts': get_trial_counts,
+    'is_in_iti_period': in_iti,
+    'get_reference_time': get_reference,
+    'get_adapted_values': get_adapted,
+    'get_trial_counts': get_counts,
     'update_parameters': update_parameters,
     'close': close,
     'is_running': is_running
 }
+def main():
+    global logic
+    
+    print("yes")
+    logic = threading.Thread(target=run_logic)
+    print("yes")
+    logic.start()
+    print("yes")
+    print("yes")
+    start_gui(passed_functions)
 
-start_gui(passed_functions)
+if __name__ == "__main__":
+    main()

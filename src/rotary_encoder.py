@@ -3,8 +3,8 @@ import time
 import pandas as pd
 
 # Define the GPIO pins for the rotary encoder
-encoder_a = 24  # Example GPIO pin for A
-encoder_b = 25  # Example GPIO pin for B
+encoder_a = 20  # Example GPIO pin for A
+encoder_b = 21  # Example GPIO pin for B
 
 # Global variables for the latest angle and timestamps
 latest_angle = 0

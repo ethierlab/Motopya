@@ -8,7 +8,7 @@ from datetime import datetime
 from datetime import timedelta
 import RPi.GPIO as GPIO
 
-from trial import trial
+from trial import Trial
 
 STATE_IDLE = 0
 STATE_TRIAL_INIT = 1 #probably not necessary
@@ -52,60 +52,97 @@ class Session():
         self.session = {}
         self.trial_table = []
         
+        self.session_running = False
+        self.session_done = False
+        
         current_datetime = datetime.now()
         
         self.session["Start_time"] = current_datetime.strftime("%d-%B-%Y %H:%M:%S")
-        self.session["Initial_hit_thresh"] = hit_thresh
-        self.session["Initial_hold_time"] = hold_time
+        self.session["Initial_hit_thresh"] = self.hit_threshold
+        self.session["Initial_hold_time"] = self.hold_time
         
         # Trial counters
         self.num_trials = 0
         self.num_success = 0
         self.num_pellets = 0
         
+        self.trial = None
+        self.in_iti_period = False
+        self.reference_time = t.time()
         
-    def start():
-        while True:
+        self.peak_value = 0
+        self.NEXT_STATE = STATE_IDLE
+        
+        self.stop_session = False
+        self.previous_angle = 0
+        
+        self.successes = []
+        
+        self.current_time = t.time()
+        
+    def start(self):
+        print("starting session")
+        self.session_running = True
+        while self.session_running:
             self.trial_logic()
+            t.sleep(0.001)
+        print("done running session")
+            
+    def is_running(self):
+        return self.session_running
+    
+    def is_done(self):
+        return self.session_done
+    def stop(self):
+        self.session_running = False
+        if self.trial != None:
+            self.trial.stop()
              
         
-    def trial_logic():
-        current_time = t.time()
+    def trial_logic(self):
+        self.current_time = t.time()
         
         latest_angle, latest_time = get_latest()
-        self.peak_value = max(latest_angle, peak_value)
-        self.last_move_time = current_time
+        self.last_move_time = self.current_time
         CURRENT_STATE = self.NEXT_STATE
         
         # Check if trial should start
         if CURRENT_STATE == STATE_IDLE:
-            reference_time = latest_time
+            self.in_iti_period = False
+            self.reference_time = latest_time
             if t.time() - self.session_start > self.session_duration * 60 * 60 or self.num_trials >= self.max_trials or self.stop_session:
                 self.NEXT_STATE = STATE_SESSION_END   
-            elif latest_angle >= init_threshold and previous_angle < init_threshold:
+            elif latest_angle >= self.init_threshold and self.previous_angle < self.init_threshold:
                 self.NEXT_STATE = STATE_TRIAL_STARTED
+#             print("self.current_time 0",self.current_time)
         elif CURRENT_STATE == STATE_TRIAL_STARTED:
             self.num_trials += 1
             print("Trial started")
             
-            trial = Trial(self.hit_duration, self.hit_threshold, self.hold_time, self.post_duration, self.iniBaseline,
+            self.trial = Trial(self.init_threshold, self.hit_duration, self.hit_threshold, self.hold_time, self.post_duration, self.iniBaseline,
                           self.lever_gain, self.drop_tolerance, self.session_start, latest_time)
-            trial.run()
+            self.trial.run()
+            if self.trial.is_finished():
+                self.trial_table.append(self.trial.get_trial_data())
+                self.adapt_values(self.trial.get_success())
             
-            trial_table.append(trial.get_trial_data())
-            adapt_values(trial.get_success())
-            
-            NEXT_STATE = STATE_INTER_TRIAL
-            self.last_trial_end_time = current_time
+            self.NEXT_STATE = STATE_INTER_TRIAL
+            print("turning true")
+            self.in_iti_period = True
+            print("INTER")
+            clear_data()
+            self.last_trial_end_time = self.trial.get_end()
         elif CURRENT_STATE == STATE_INTER_TRIAL:
-            if current_time - self.last_trial_end_time >= iti:
-                in_iti_period = False
+            if (self.current_time - self.last_trial_end_time) >= self.iti:
+                print("turning false")
+                self.in_iti_period = False
                 self.NEXT_STATE = STATE_IDLE
                 print("IDLE")
         elif CURRENT_STATE == STATE_SESSION_END:
-            pass
+            self.session_running = True
+            self.session_done = True
         
-        previous_angle = latest_angle
+        self.previous_angle = latest_angle
             
     #     angles = get_angles()
     #     timestamps = get_timestamps()
@@ -115,7 +152,7 @@ class Session():
             # clear_data()
             # last_move_time = current_time  # Reset the timer
     #
-    def adapt_values(success):
+    def adapt_values(self, success):
         if success:
             self.num_success += 1
             self.num_pellets +=1 
@@ -128,28 +165,28 @@ class Session():
             if self.hold_time_adapt:
                 self.hold_time = min(self.hold_time_max, round(self.hold_time + 0.1, 4))
 
-        if get_average(successes) <= 0.4:
-            if hit_thresh_adapt:
-                self.hit_threshold = max(hit_thresh_min, self.hit_threshold - 10)
-            if hold_time_adapt:
-                self.hold_time = max(hold_time_min, round(self.hold_time - 0.1, 4))
+        if average <= 0.4:
+            if self.hit_thresh_adapt:
+                self.hit_threshold = max(self.hit_thresh_min, self.hit_threshold - 10)
+            if self.hold_time_adapt:
+                self.hold_time = max(self.hold_time_min, round(self.hold_time - 0.1, 4))
                 
-    def is_in_iti_period():
+    def is_in_iti_period(self):
         return self.in_iti_period
 
-    def get_trial_counts():
+    def get_trial_counts(self):
         return self.num_trials, self.num_success, self.num_pellets
 
-    def is_trial_started():
+    def is_trial_started(self):
         return self.trial_started
         
-    def get_reference_time():
+    def get_reference_time(self):
         return self.reference_time
         
-    def get_last_values():
+    def get_last_values(self):
         return self.last_hit_thresh, self.last_hold_time
 
-    def record_trial(init_thresh, hit_thresh, hold_time, trial_end, success, peak_value):
+    def record_trial(self, init_thresh, hit_thresh, hold_time, trial_end, success, peak_value):
         trial_table.append(self.trial.get_trial_data())
         
         self.session["Number_trials"] = num_trials
@@ -157,20 +194,20 @@ class Session():
         self.session["Last_hit_thresh"] = hit_thresh
         self.session["Last_hold_time"] = hold_time * 1000
 
-    def feed():
+    def feed(self):
         self.num_pellets += 1
         gpio_feed()
         return
         
-    def get_success_average():
-        return sum(self.successes) / len(self.successes) if len(self.successes) > 0 else 0.5
+    def get_success_average(self):
+        return sum(self.successes) / len(self.successes) if len(self.successes) >= 10 else 0.5
         
-    def get_adapted_values():
-        return self.session_hit_thresh, self.session_hold_time
+    def get_adapted_values(self):
+        return self.hit_threshold, self.hold_time
         
-    def get_trial_table():
+    def get_trial_table(self):
         return self.trial_table
         
-    def get_session():
+    def get_session(self):
         return self.session
 
