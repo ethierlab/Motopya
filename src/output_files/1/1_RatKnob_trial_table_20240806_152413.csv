@@ -1,3 +1,0 @@
-start_time,init_thresh,hit_thresh,Force,hold_time,duration,success,peak
-1722972.237027,50.0,100.0,"timestamps, angles",1.0,1722972.24097346,True,124
-1722972.2436816364,50.0,110.0,"timestamps, angles",1.1,1722972.2461323596,True,153
