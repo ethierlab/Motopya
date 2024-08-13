@@ -3,7 +3,7 @@ import sys
 import threading
 import pkg_resources
 import subprocess
-
+import stat
 def install(package):
     subprocess.check_call([sys.executable, "-m", "pip", "install", package])
 
@@ -27,8 +27,28 @@ def check_packages(do_install):
             
         if not canRun:
             sys.exit()
+            
+def check_permissions():
+    output_dir = "output_files"
+    working_directory = os.getcwd()
+    
+    permissions = os.stat(working_directory).st_mode
+    
+    readable_permissions = stat.filemode(permissions)
+    
+    is_writable = permissions & stat.S_IWUSR != 0
+    is_readable = permissions & stat.S_IWUSR != 0
+    
+    if not is_writable and not is_readable:
+        print(f"Permissions for {working_directory}: {readable_permissions}")
+        print("Error: The working directory is not readable and writeable.")
+        sys.exit()
+#     else:
+#         print("The working directory is writeable.")
 
+check_permissions()
 check_packages(True)
+
 
 
 import numpy as np
@@ -220,30 +240,22 @@ def save_session_parameters(file_path, dict):
 
 def save_session_data():
     file_input_type = "_RatKnob"
-    rat_dir = os.path.join(parameters["saveFolder"], "output_files", str(parameters["ratID"]))
+#     rat_dir = os.path.join(parameters["saveFolder"], "output_files", str(parameters["ratID"]))
+    rat_dir = os.path.join("output_files", str(parameters["ratID"]))
     dir_exists = os.path.exists(rat_dir)
     message = ""
-    if not dir_exists:
-        message = f'Creating new folder for animal parameters["ratID"]\n'
-        try:
-            dir_exists = True
-            os.makedirs(rat_dir, exist_ok=True)
-        except OSError:
-            dir_exists = False
-            message = 'Failed to create new folder in specified location'
-            return False, message
-    if dir_exists:
-        ttfname = parameters["ratID"] + file_input_type + '_trial_table_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.csv'
-        pfname = parameters["ratID"] + file_input_type + '_params_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.csv'
-        gfname = parameters["ratID"] + '_global_stats.csv'
-        save_trial_table(os.path.join(rat_dir, ttfname))
-        save_session_parameters(os.path.join(rat_dir, pfname), parameters)
-
-        message = 'Behavior stats and parameters saved successfully'
-        update_global_stats(os.path.join(rat_dir, gfname))
-    else:
-        message = 'Behavior stats and parameters NOT saved'
+    try:
+        os.makedirs(rat_dir, exist_ok=True)
+    except:
+        message = 'Failed to create new folder in specified location'
         return False, message
+    ttfname = parameters["ratID"] + file_input_type + '_trial_table_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.csv'
+    pfname = parameters["ratID"] + file_input_type + '_params_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.csv'
+    gfname = parameters["ratID"] + '_global_stats.csv'
+    save_trial_table(os.path.join(rat_dir, ttfname))
+    save_session_parameters(os.path.join(rat_dir, pfname), parameters)
+
+    message = 'Behavior stats and parameters saved successfully'
         
     return True, message
     
