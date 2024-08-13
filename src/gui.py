@@ -15,7 +15,7 @@ import csv
 from datetime import datetime
 from datetime import timedelta
 import sys
-
+from utils import is_positive_float, is_int, is_boolean
 
 # Initialize trial parameters
 iniBaseline = 0
@@ -129,23 +129,6 @@ def manage_time():
     elif min_time['state'] == tk.NORMAL and max_time['state'] == tk.NORMAL:
         min_time['state'] = tk.DISABLED
         max_time['state'] = tk.DISABLED
-
-def is_int(s):
-    try:
-        int(s)
-        return True
-    except ValueError:
-        return False
-    
-def is_positive_float(s):
-    try:
-        float_value = float(s)
-        return float_value >= 0
-    except ValueError:
-        return False
-    
-def is_boolean(value):
-    return isinstance(value, bool)
     
 
 def entry_changed(*args):
@@ -569,11 +552,11 @@ def start_trial():
     session_duration = float(parameters["minDuration"].get())
     post_duration = float(1)
     hit_thresh_adapt = bool(parameters["hitThreshAdapt"].get())
-    hit_thresh_min = float(parameters["hitThreshMin"].get())
-    hit_thresh_max = float(parameters["hitThreshMax"].get())
+    hit_thresh_min = float(parameters["hitThreshMin"].get()) if is_positive_float(parameters["hitThreshMin"].get()) else 0
+    hit_thresh_max = float(parameters["hitThreshMax"].get()) if is_positive_float(parameters["hitThreshMax"].get()) else 0
     hold_time_adapt = bool(parameters["holdTimeAdapt"].get())
-    hold_time_min = float(parameters["holdTimeMin"].get())
-    hold_time_max = float(parameters["holdTimeMax"].get())
+    hold_time_min = float(parameters["holdTimeMin"].get()) if is_positive_float(parameters["holdTimeMin"].get()) else 0
+    hold_time_max = float(parameters["holdTimeMax"].get()) if is_positive_float(parameters["holdTimeMax"].get()) else 0
     lever_gain = float(parameters["leverGain"].get())
     drop_tolerance = float(parameters["forceDrop"].get())
     max_trials = float(parameters["maxTrials"].get())

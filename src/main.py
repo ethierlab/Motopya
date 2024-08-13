@@ -13,6 +13,7 @@ from trial_logic import trial_logic, get_trial_counts, reset_trial_counts, is_in
 from trial_logic import get_last_values, initialize_session, get_session
 from session_w_trial import Session
 from gui import start_gui
+from utils import is_positive_float
 
 
 #Initialize Session object
@@ -235,6 +236,7 @@ def update_global_stats(filename):
 
 session_thread = None
 
+    
 def run_session():
     print("running session")
     if session != None:
@@ -257,11 +259,11 @@ def start_session():
     session_duration = float(parameters["minDuration"])
     post_duration = float(1)
     hit_thresh_adapt = bool(parameters["hitThreshAdapt"])
-    hit_thresh_min = float(parameters["hitThreshMin"])
-    hit_thresh_max = float(parameters["hitThreshMax"])
+    hit_thresh_min = float(parameters["hitThreshMin"]) if is_positive_float(parameters["hitThreshMin"]) else 0
+    hit_thresh_max = float(parameters["hitThreshMax"]) if is_positive_float(parameters["hitThreshMax"]) else 0
     hold_time_adapt = bool(parameters["holdTimeAdapt"])
-    hold_time_min = float(parameters["holdTimeMin"])
-    hold_time_max = float(parameters["holdTimeMax"])
+    hold_time_min = float(parameters["holdTimeMin"]) if is_positive_float(parameters["holdTimeMin"]) else 0
+    hold_time_max = float(parameters["holdTimeMax"]) if is_positive_float(parameters["holdTimeMax"]) else 0
     lever_gain = float(parameters["leverGain"])
     drop_tolerance = float(parameters["forceDrop"])
     max_trials = float(parameters["maxTrials"])
