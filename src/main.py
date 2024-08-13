@@ -12,7 +12,6 @@ def check_packages(do_install):
         dependencies = f.read().splitlines()
     canRun = True
     for dependency in dependencies:
-        print(dependency)
         try:
             pkg_resources.require(dependency)
         except pkg_resources.DistributionNotFound:
@@ -43,7 +42,7 @@ from datetime import timedelta
 from rotary_encoder import setup_encoder, get_latest_angle, get_data
 from trial_logic import trial_logic, get_trial_counts, reset_trial_counts, is_in_iti_period, is_trial_started, get_reference_time, feed, get_adapted_values, reset, get_trial_table
 from trial_logic import get_last_values, initialize_session, get_session
-from session_w_trial import Session
+from session import Session
 from gui import start_gui
 from utils import is_positive_float
 
@@ -185,12 +184,12 @@ def stop_session():
     global running, session
     if session != None:
         session.stop()
-    session = None
+#     session = None
     running = False
     reset()
     
 def save_trial_table(filename):
-    trial_table = get_trial_table()
+    trial_table = session.get_trial_table()
 
     try:
         with open(filename, mode='w', newline='') as csvfile:
@@ -206,7 +205,7 @@ def save_trial_table(filename):
     except PermissionError:
         print("Cannot write to open file")
 
-def save_file(file_path, dict):
+def save_session_parameters(file_path, dict):
     saved_parameters = {}
     for key, value in dict.items():
         saved_parameters[key] = value
@@ -228,7 +227,7 @@ def save_session_data():
         message = f'Creating new folder for animal parameters["ratID"]\n'
         try:
             dir_exists = True
-            os.mkdir(rat_dir)
+            os.makedirs(rat_dir, exist_ok=True)
         except OSError:
             dir_exists = False
             message = 'Failed to create new folder in specified location'
@@ -238,8 +237,7 @@ def save_session_data():
         pfname = parameters["ratID"] + file_input_type + '_params_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.csv'
         gfname = parameters["ratID"] + '_global_stats.csv'
         save_trial_table(os.path.join(rat_dir, ttfname))
-        # save_file(os.join(rat_dir, ttfname), trial_table)
-        save_file(os.path.join(rat_dir, pfname), parameters)
+        save_session_parameters(os.path.join(rat_dir, pfname), parameters)
 
         message = 'Behavior stats and parameters saved successfully'
         update_global_stats(os.path.join(rat_dir, gfname))
@@ -251,7 +249,7 @@ def save_session_data():
     
 
 def update_global_stats(filename):
-    session = get_session()
+    session_info = session.get_session()
 
     exists = os.path.isfile(filename)
     try:
@@ -262,17 +260,12 @@ def update_global_stats(filename):
                 print("writing header")
                 writer.writeheader()
 
-            writer.writerow(session)
+            writer.writerow(session_info)
     except PermissionError:
         print("Cannot write to open file")
 
 session_thread = None
 
-    
-def run_session():
-    print("running session")
-    if session != None:
-        session.start()
 # Function to start the trials
 def start_session():
     global session, session_thread
@@ -304,11 +297,7 @@ def start_session():
     
     session = Session(init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration, iniBaseline, session_duration, hit_thresh_adapt, hit_thresh_min, hit_thresh_max,
         hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials)
-#     if session_thread != None:
-#         session_thread.join()
-#     session_thread = threading.Thread(target=run_session)
-#     session_thread.start()
-    print("here2")
+    
     initialize_session(float(parameters["hitThresh"]), float(parameters["holdTime"]) * 1000)
     
     running = True
@@ -327,8 +316,6 @@ def run_logic():
         if running and session != None and not session.is_running() and not session.is_done():
             print("starting session")
             session.start()
-#             trial_logic(init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration,iniBaseline, session_duration, hit_thresh_adapt, hit_thresh_min, hit_thresh_max,
-#             hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials)
         if exit_program:
             break
         t.sleep(0.001)
