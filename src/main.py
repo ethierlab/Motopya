@@ -1,12 +1,35 @@
 import os
 import sys
-from signal import pause
 import threading
+import pkg_resources
+
+def check_packages():
+    with open('requirements.txt') as f:
+        dependencies = f.read().splitlines()
+    canRun = True
+    for dependency in dependencies:
+        print(dependency)
+        try:
+            pkg_resources.require(dependency)
+        except pkg_resources.DistributionNotFound:
+            print(f"{dependency} is not installed. Unable to run program.")
+            canRun = False
+        except pkg_resources.VersionConflict as e:
+            print(e)
+            
+        if not canRun:
+            sys.exit()
+
+check_packages()
+
+
 import numpy as np
 import time as t
 import csv
 from datetime import datetime
 from datetime import timedelta
+
+
 
 from rotary_encoder import setup_encoder, get_latest_angle, get_data
 from trial_logic import trial_logic, get_trial_counts, reset_trial_counts, is_in_iti_period, is_trial_started, get_reference_time, feed, get_adapted_values, reset, get_trial_table
@@ -344,15 +367,14 @@ passed_functions = {
     'close': close,
     'is_running': is_running
 }
+
+
+
+        
 def main():
     global logic
-    
-    print("yes")
     logic = threading.Thread(target=run_logic)
-    print("yes")
     logic.start()
-    print("yes")
-    print("yes")
     start_gui(passed_functions)
 
 if __name__ == "__main__":

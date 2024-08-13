@@ -6,7 +6,6 @@ import os
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.animation as animation
-from signal import pause
 import threading
 import numpy as np
 import time as t
