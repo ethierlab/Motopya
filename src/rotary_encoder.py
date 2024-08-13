@@ -1,4 +1,4 @@
-from gpiozero import RotaryEncoder2
+from ExLibs.encoder import RotaryEncoder2
 import time
 import pandas as pd
 
@@ -18,12 +18,13 @@ encoder = None
 def setup_encoder():
     global encoder, initial_time
     initial_time = time.time()
-    encoder = RotaryEncoder2(encoder_a, encoder_b, max_steps=360,half_step=False)
+    encoder = RotaryEncoder2(encoder_a, encoder_b, max_steps=360,half_step=True)
 #     encoder = RotaryEncoder(encoder_a, encoder_b, max_steps=360)
     encoder.when_rotated = rotary_changed
 def rotary_changed():
     global latest_angle, last_move_time, data
     latest_angle = encoder.steps   # Get the current angle with 0.5 degree resolution
+    print(latest_angle)
     timestamp = int(time.time() * 1000)  # Get current time in milliseconds
     new_data = pd.DataFrame({"timestamps": [timestamp], "angles": [latest_angle]})
     data = pd.concat([data, new_data], ignore_index = True)
