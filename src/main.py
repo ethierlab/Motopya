@@ -2,8 +2,12 @@ import os
 import sys
 import threading
 import pkg_resources
+import subprocess
 
-def check_packages():
+def install(package):
+    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+
+def check_packages(do_install):
     with open('requirements.txt') as f:
         dependencies = f.read().splitlines()
     canRun = True
@@ -12,15 +16,20 @@ def check_packages():
         try:
             pkg_resources.require(dependency)
         except pkg_resources.DistributionNotFound:
-            print(f"{dependency} is not installed. Unable to run program.")
-            canRun = False
+            print(f"{dependency} is not installed.")
+            if do_install:
+                print("Installing...")
+                install(dependency)
+            else:
+                canRun = False
         except pkg_resources.VersionConflict as e:
             print(e)
+            canRun = False
             
         if not canRun:
             sys.exit()
 
-check_packages()
+check_packages(True)
 
 
 import numpy as np
