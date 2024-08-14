@@ -59,7 +59,7 @@ from ExLibs.input_device import RotaryEncoder, Lever
 from ExLibs.session import Session
 from ExLibs.gui import start_gui
 from ExLibs.utils import is_positive_float
-
+from ExLibs.feeder import gpio_feed
 
 #Initialize Session object
 
@@ -392,7 +392,10 @@ def in_iti():
     return session.is_in_iti_period()
 
 def gui_feed():
-    session.feed()
+    if session != None: 
+        session.feed()
+    else:
+        gpio_feed()
 # start_session_func, stop_session_func, feed_func, load_parameters_func, save_parameters_func, get_data_func, save_session_data_func
 
 passed_functions = {
