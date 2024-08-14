@@ -43,8 +43,6 @@ def check_permissions():
         print(f"Permissions for {working_directory}: {readable_permissions}")
         print("Error: The working directory is not readable and writeable.")
         sys.exit()
-#     else:
-#         print("The working directory is writeable.")
 
 check_permissions()
 check_packages(True)
@@ -57,11 +55,8 @@ import csv
 from datetime import datetime
 from datetime import timedelta
 
-
-
-from rotary_encoder import setup_encoder, get_latest_angle, get_data
-from trial_logic import trial_logic, get_trial_counts, reset_trial_counts, is_in_iti_period, is_trial_started, get_reference_time, feed, get_adapted_values, reset, get_trial_table
-from trial_logic import get_last_values, initialize_session, get_session
+from input_device import RotaryEncoder, Lever
+from trial_logic import feed
 from session import Session
 from gui import start_gui
 from utils import is_positive_float
@@ -118,12 +113,14 @@ parameters["holdTimeMin"] = 12 #13
 parameters["holdTimeMax"] = 13 #14
 parameters["saveFolder"]  = "" #15
 parameters["ratID"] = "" #16
+parameters["inputType"] = True
 
 def gui_save_parameters(parameters_list, file_path):
     update_parameters(parameters_list)
     return save_parameters(file_path)
 
 def update_parameters(parameters_list):
+    global parameters
     for i, key in enumerate(parameters):
         parameters[key] = parameters_list[i]
         
@@ -150,15 +147,27 @@ def load_parameters(file_path):
     
     directory = os.path.dirname(file_path)
     message = ""
+    
+    print(parameters.keys())
     try:
         with open(file_path, 'r') as csvfile:
             reader = csv.reader(csvfile)
+            headers = []
             for row in reader:
                 key, value = row
+                headers.append(key)
                 if key not in parameters.keys():
-                    message = "That is not a configuration file." + str(key)
+                    message = "That is not a configuration file. " + str(key) + " is not a parameter. "
                     return False, message, list(parameters.values())
                 parameters[key] = value
+                
+            for key in parameters.keys():
+                if key not in headers:
+                    message = "That is not a configuration file." + str(key) + " is not a parameter. "
+                    return False, message, list(parameters.values())
+                
+                                
+                                
 
     except Exception as e: 
         message = "Error reading file." + str(file_path)
@@ -206,7 +215,6 @@ def stop_session():
         session.stop()
 #     session = None
     running = False
-    reset()
     
 def save_trial_table(filename):
     trial_table = session.get_trial_table()
@@ -219,7 +227,7 @@ def save_trial_table(filename):
             writer.writeheader()
             for trial in trial_table:
                 # Convert list of Force values to a string for CSV
-                df_string = {"time, angle": ','.join(f"({row['timestamps']}, {row['angles']})" for _, row in trial["Force"].iterrows())}
+                df_string = {"time, value": ','.join(f"({row['timestamps']}, {row['values']})" for _, row in trial["Force"].iterrows())}
                 trial["Force"] = df_string
                 writer.writerow(trial)
     except PermissionError:
@@ -281,11 +289,10 @@ session_thread = None
 # Function to start the trials
 def start_session():
     global session, session_thread
-
-    
     global running
     global init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration,iniBaseline, session_duration, hit_thresh_adapt, hit_thresh_min, hit_thresh_max
     global hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials, save_folder, ratID
+    global input_device, lever, encoder
     init_threshold = float(parameters["iniThreshold"])
     hit_duration = float(parameters["hitWindow"])
     hit_threshold = float(parameters["hitThresh"])
@@ -306,20 +313,46 @@ def start_session():
     max_trials = float(parameters["maxTrials"])
     save_folder = str(parameters["saveFolder"])
     ratID = str(parameters["ratID"])
+    input_type = bool(parameters["inputType"])
+    
+    
+    
+    if (input_type):
+        input_device = lever
+    else:
+        input_device = encoder
+    
+    input_device.modify_gain(lever_gain)
     
     session = Session(init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration, iniBaseline, session_duration, hit_thresh_adapt, hit_thresh_min, hit_thresh_max,
-        hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials)
-    
-    initialize_session(float(parameters["hitThresh"]), float(parameters["holdTime"]) * 1000)
+        hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials, input_device)
     
     running = True
 
 # Set up the rotary encoder
-setup_encoder()
+# setup_encoder()
+
+encoder = RotaryEncoder(1)
+encoder.setup_encoder()
+
+exit_program = False
+lever = Lever(1)
+def lever_loop():
+    while True:
+        if exit_program:
+            break
+        lever.update_value()
+        t.sleep(0.001)
+        
+leverThread = threading.Thread(target=lever_loop)
+leverThread.start()
+input_device = lever
+
+def get_data():
+    return input_device.get_data()
 
 # Initialize running state
 running = False
-exit_program = False
 
 def run_logic():
     global parameters, session
@@ -345,6 +378,8 @@ def close():
     exit_program = True
     if logic:
         logic.join()
+    if leverThread:
+        leverThread.join()
     
 def get_reference():
     return session.get_reference_time()
@@ -357,12 +392,15 @@ def get_counts():
 
 def in_iti():
     return session.is_in_iti_period()
+
+def gui_feed():
+    session.feed()
 # start_session_func, stop_session_func, feed_func, load_parameters_func, save_parameters_func, get_data_func, save_session_data_func
 
 passed_functions = {
     'start_session': start_session,
     'stop_session': stop_session,
-    'feed': feed,
+    'feed': gui_feed,
     'load_parameters': load_parameters,
     'save_parameters': gui_save_parameters,
     'get_data': get_data,

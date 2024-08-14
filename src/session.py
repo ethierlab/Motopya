@@ -1,5 +1,4 @@
 import time as t
-from rotary_encoder import get_latest_angle, get_latest, get_data, clear_data, last_move_time
 from feeder import  gpio_feed
 import numpy as np
 from collections import deque
@@ -27,8 +26,7 @@ NEXT_STATE = CURRENT_STATE
 
 class Session():
     def __init__(self, init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration, iniBaseline, session_duration, hit_thresh_adapt, hit_thresh_min, hit_thresh_max,
-        hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials):
-        
+        hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials, input_device):
         self.init_threshold = init_threshold
         self.hit_duration = hit_duration
         self.hit_threshold = hit_threshold
@@ -46,6 +44,7 @@ class Session():
         self.lever_gain = lever_gain
         self.drop_tolerance = drop_tolerance
         self.max_trials = max_trials
+        self.input_device = input_device
         
         self.session_start = t.time()
         
@@ -79,6 +78,7 @@ class Session():
         self.successes = []
         
         self.current_time = t.time()
+        self.last_move_time = 0
         
     def start(self):
         print("starting session")
@@ -93,6 +93,7 @@ class Session():
     
     def is_done(self):
         return self.session_done
+    
     def stop(self):
         self.session_running = False
         if self.trial != None:
@@ -102,7 +103,8 @@ class Session():
     def trial_logic(self):
         self.current_time = t.time()
         
-        latest_angle, latest_time = get_latest()
+        latest_value, latest_time = self.input_device.get_latest()
+#         print("In session", latest_value)
         self.last_move_time = self.current_time
         CURRENT_STATE = self.NEXT_STATE
         
@@ -112,7 +114,7 @@ class Session():
             self.reference_time = latest_time
             if t.time() - self.session_start > self.session_duration * 60 * 60 or self.num_trials >= self.max_trials or self.stop_session:
                 self.NEXT_STATE = STATE_SESSION_END   
-            elif latest_angle >= self.init_threshold and self.previous_angle < self.init_threshold:
+            elif latest_value >= self.init_threshold and self.previous_angle < self.init_threshold:
                 self.NEXT_STATE = STATE_TRIAL_STARTED
 #             print("self.current_time 0",self.current_time)
         elif CURRENT_STATE == STATE_TRIAL_STARTED:
@@ -120,7 +122,7 @@ class Session():
             print("Trial started")
             
             self.trial = Trial(self.init_threshold, self.hit_duration, self.hit_threshold, self.hold_time, self.post_duration, self.iniBaseline,
-                          self.lever_gain, self.drop_tolerance, self.session_start, latest_time)
+                          self.lever_gain, self.drop_tolerance, self.session_start, latest_time, self.input_device)
             self.trial.run()
             if self.trial.is_finished():
                 self.trial_table.append(self.trial.get_trial_data())
@@ -132,7 +134,7 @@ class Session():
             print("turning true")
             self.in_iti_period = True
             print("INTER")
-            clear_data()
+            self.input_device.clear_data()
             self.last_trial_end_time = self.trial.get_end()
         elif CURRENT_STATE == STATE_INTER_TRIAL:
             if (self.current_time - self.last_trial_end_time) >= self.iti:
@@ -144,7 +146,7 @@ class Session():
             self.session_running = True
             self.session_done = True
         
-        self.previous_angle = latest_angle
+        self.previous_angle = latest_value
             
     #     angles = get_angles()
     #     timestamps = get_timestamps()

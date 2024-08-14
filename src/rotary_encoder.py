@@ -20,6 +20,7 @@ def setup_encoder():
     initial_time = time.time()
     encoder = RotaryEncoder2(encoder_a, encoder_b, max_steps=360,half_step=True)
     encoder.when_rotated = rotary_changed
+    
 def rotary_changed():
     global latest_angle, last_move_time, data
     latest_angle = encoder.steps   # Get the current angle with 0.5 degree resolution

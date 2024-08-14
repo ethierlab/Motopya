@@ -76,6 +76,7 @@ parameters["holdTimeMin"] = tk.StringVar(root)#13
 parameters["holdTimeMax"] = tk.StringVar(root)#14
 parameters["saveFolder"]  = tk.StringVar(root)
 parameters["ratID"] = tk.StringVar(root)
+parameters["inputType"] = tk.BooleanVar(root)
 parameters["iniBaseline"].set("1")
 
 
@@ -289,6 +290,8 @@ def load_parameters_button():
     else:
         min_time.config(state="disabled")
         max_time.config(state="disabled")
+        
+    refresh_input_text(root, 0)
     
         
 def get_parameters_list():
@@ -296,6 +299,7 @@ def get_parameters_list():
     for i, key in enumerate(parameters):
         parameters_list.append(parameters[key].get())
     return parameters_list
+
 def save_parameters_button():
     global parameters, canClose
     canClose = False
@@ -483,9 +487,25 @@ Title_array = tk.Label(Cadre6, text="Knob Rotation Angle").grid(row=1, column=1,
 Cadre7 =tk.Frame(CadreGauche)
 Cadre7.grid(row=4, column=1, sticky="n", pady=(20,20))
 
+def toggle_input_type():
+    global parameters
+    parameters["inputType"].set(not parameters["inputType"].get())
+    refresh_input_text(root, 0)
+        
+        
+def refresh_input_text(frame, depth):
+    for child in frame.winfo_children():
+        if isinstance(child, (tk.Label)):
+            text = child.cget("text")
+            if not parameters["inputType"].get():
+                child.config(text=text.replace("(g)", "(deg)").replace("Pull", "Knob"))
+            else:
+                child.config(text=text.replace("(deg)", "(g)").replace("Knob", "Pull"))
+        elif isinstance(child, (tk.Frame)) and child != frame:
+            refresh_input_text(child, depth + 1)
 
-# typeButton = tk.Button(Cadre7, text='Toggle Input Type', command=lambda: toggle_input_type(root, 0))
-# typeButton.grid(row=1, column=2)
+typeButton = tk.Button(Cadre7, text='Toggle Input Type', command=lambda: toggle_input_type())
+typeButton.grid(row=1, column=2)
 
 # Label qui montre des messages
 DisplayBox = tk.Label(Cadre7, text="", font=("Serif", 12))
@@ -495,9 +515,9 @@ def display(text):
     DisplayBox.config(text=text)
 
 def save_results(crashed):
-    # file_input_type = "_RatPull"
-    # if not lever_type:
-    file_input_type = "_RatKnob"
+    file_input_type = "_RatPull"
+    if not parameters["inputType"].get():
+        file_input_type = "_RatKnob"
     if crashed:
         response = messagebox.askyesno("Sorry about that...", "RatPull lever_pull_behavior Crashed!\nSave results?")
     else:
@@ -560,6 +580,7 @@ def start_trial():
     drop_tolerance = float(parameters["forceDrop"].get())
     max_trials = float(parameters["maxTrials"].get())
     save_folder = str(parameters["saveFolder"].get())
+    input_type = bool(parameters["inputType"].get())
     ratID = str(parameters["ratID"].get())
 
     init_threshold_line.set_ydata([init_threshold, init_threshold])
@@ -586,7 +607,7 @@ def animate(i):
         if main_functions["is_in_iti_period"]():
             return
         data = main_functions["get_data"]()
-        angles = np.array(data['angles'])
+        angles = np.array(data['values'])
         reference_time = main_functions["get_reference_time"]()
         adapted_threshold, adapted_time = main_functions["get_adapted_values"]()
         

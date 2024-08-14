@@ -2,11 +2,12 @@ testsiamak.csv
 test.csv
 #Folders
 
-RatTaskPyRaspPi/spidev-test/
-RatTaskPyRaspPi/Deprecated_files/ads1015_python
+
+
 
 src/output_files
 src/parameters
+src/ads1015-python
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -24,7 +24,8 @@ NEXT_STATE = CURRENT_STATE
 
 
 class Trial():
-    def __init__(self, init_threshold, hit_duration, hit_threshold, hold_time, post_duration, iniBaseline,lever_gain, drop_tolerance, session_start, reference_time):
+    def __init__(self, init_threshold, hit_duration, hit_threshold, hold_time,
+                 post_duration, iniBaseline,lever_gain, drop_tolerance, session_start, reference_time, input_device):
         
         self.init_threshold = init_threshold
         self.hit_duration = hit_duration
@@ -44,6 +45,7 @@ class Trial():
         self.finished = False
         self.trial_stats = {}
         self.last_trial_end_time = 0
+        self.input_device = input_device
         
     def run(self):
         print("trial started")
@@ -58,25 +60,26 @@ class Trial():
     def trial_logic(self):
         current_time = t.time()
         
-        latest_angle, latest_time = get_latest()
-        self.peak_value = max(latest_angle, self.peak_value)
+        latest_value, latest_time = self.input_device.get_latest()
+        
+        self.peak_value = max(latest_value, self.peak_value)
         self.last_move_time = current_time
         CURRENT_STATE = self.NEXT_STATE
         
         if CURRENT_STATE == STATE_TRIAL_STARTED:
             # Check for trial timeout
-            if current_time - self.reference_time >= self.hit_duration and latest_angle < self.hit_threshold:
+            if current_time - self.reference_time >= self.hit_duration and latest_value < self.hit_threshold:
                 print("time fail")
                 self.NEXT_STATE = STATE_FAILURE
             # Check for hit threshold
-            elif latest_angle <= self.peak_value - self.drop_tolerance:
+            elif latest_value <= self.peak_value - self.drop_tolerance:
                 print("drop fail")
                 self.NEXT_STATE = STATE_FAILURE
-            elif latest_angle >= self.hit_threshold:
+            elif latest_value >= self.hit_threshold:
                 self.hit_start_time = current_time
                 self.NEXT_STATE = STATE_HOLD
         elif CURRENT_STATE == STATE_HOLD:
-            if latest_angle < self.hit_threshold:
+            if latest_value < self.hit_threshold:
                 self.NEXT_STATE = STATE_TRIAL_STARTED
             elif current_time - self.hit_start_time >= self.hold_time:
                 self.NEXT_STATE = STATE_SUCCESS
@@ -112,10 +115,12 @@ class Trial():
         return self.last_hit_thresh, self.last_hold_time
 
     def record_trial(self):
-        trial_data = get_data()
+        trial_data = self.input_device.get_data()
         timestamps = np.array(trial_data["timestamps"]) - int(self.reference_time * 1000)
-        index = np.where(timestamps >= -1000)[0][0]
-        trial_data = pd.DataFrame({'timestamps': timestamps[index:], 'angles': trial_data["angles"][index:]})
+        index = 0
+        if len(timestamps) > 0:  
+            index = np.where(timestamps >= -1000)[0][0]
+        trial_data = pd.DataFrame({'timestamps': timestamps[index:], 'values': trial_data["values"][index:]})
         
         self.trial_stats = {}
         self.trial_stats["start_time"] = round(self.reference_time - self.session_start, 2)
