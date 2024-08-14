@@ -1,12 +1,12 @@
 import time as t
-from rotary_encoder import get_latest_angle, get_latest, get_data, clear_data, last_move_time
-from feeder import  gpio_feed
 import numpy as np
 from collections import deque
 import pandas as pd
 from datetime import datetime
 from datetime import timedelta
 import RPi.GPIO as GPIO
+
+from ExLibs.feeder import  gpio_feed
 
 STATE_IDLE = 0
 STATE_TRIAL_INIT = 1 #probably not necessary

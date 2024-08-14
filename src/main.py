@@ -55,11 +55,10 @@ import csv
 from datetime import datetime
 from datetime import timedelta
 
-from input_device import RotaryEncoder, Lever
-from trial_logic import feed
-from session import Session
-from gui import start_gui
-from utils import is_positive_float
+from ExLibs.input_device import RotaryEncoder, Lever
+from ExLibs.session import Session
+from ExLibs.gui import start_gui
+from ExLibs.utils import is_positive_float
 
 
 #Initialize Session object
@@ -148,7 +147,6 @@ def load_parameters(file_path):
     directory = os.path.dirname(file_path)
     message = ""
     
-    print(parameters.keys())
     try:
         with open(file_path, 'r') as csvfile:
             reader = csv.reader(csvfile)

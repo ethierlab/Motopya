@@ -5,6 +5,7 @@ import time as t
 from ads1015 import ADS1015
 
 from ExLibs.encoder import RotaryEncoder2
+
 import pandas as pd
 
 
@@ -13,15 +14,26 @@ class InputDevice(ABC):
     def __init__(self, gain):
         self.gain = gain
         self.data = pd.DataFrame(columns=["timestamps", "values"])
+        self.latest_value = 0
+        self.latest_move_time = t.time()
+        self.initial_time = None
         
-    @abstractmethod
     def get_latest(self):
-        pass
+        return self.latest_value, self.latest_move_time
     
-    @abstractmethod
     def get_latest_value(self):
-        pass
+        return self.latest_value
     
+    def update_data(self, timestamp, value):
+        new_data = pd.DataFrame({"timestamps": [timestamp], "values": [self.latest_value]})
+        
+        if self.data.empty:
+            self.data = new_data
+            return
+        self.data = pd.concat([self.data, new_data], ignore_index = True)
+        if len(self.data) > 5000:
+            self.data = self.data.iloc[-3000:]
+            
     def get_data(self):
         return self.data
     
@@ -49,50 +61,34 @@ class Lever(InputDevice):
 
         self.reference = self.ads1015.get_reference_voltage()
 
-        self.latest_force = 0
-        
-        self.latest_move_time = t.time()
-        self.initial_time = None
-    
-    def get_latest(self):
-        return self.latest_force, self.latest_move_time
-    
-    def get_latest_value(self):
-        return self.latest_force
 
-        
-        
     def update_value(self):
     
         timestamp = int(t.time() * 1000)  # Get current time in milliseconds
         try:
-            self.latest_force = self.ads1015.get_compensated_voltage(
+            self.latest_value = round(self.ads1015.get_compensated_voltage(
                 channel=self.CHANNELS[0], reference_voltage=self.reference
-            ) * self.gain
-    #         print("In lever", self.latest_force)
+            ) * self.gain, 2)
+    #         print("In lever", self.latest_value)
         except OSError:
             print("ADS disconnected")
             return
         self.latest_move_time = t.time()
         
-        new_data = pd.DataFrame({"timestamps": [timestamp], "values": [self.latest_force]})
-        self.data = pd.concat([self.data, new_data], ignore_index = True)
-        if len(self.data) > 3000:
-            self.data = self.data.iloc[-3000:]
+        self.update_data(timestamp, self.latest_value)
+        
+        
         
         
 
 class RotaryEncoder(InputDevice):
-    
     def __init__(self, gain):
         super().__init__(gain)
         self.encoder_a = 20  
         self.encoder_b = 21  
 
-        self.latest_angle = 0
+        self.latest_value = 0
         self.data = pd.DataFrame(columns=["timestamps", "values"])
-        self.latest_move_time = t.time()
-        self.initial_time = None
         self.encoder = None
         
     def setup_encoder(self):
@@ -101,17 +97,9 @@ class RotaryEncoder(InputDevice):
         self.encoder.when_rotated = self.rotary_changed
         
     def rotary_changed(self):
-        self.latest_angle = self.encoder.steps * self.gain  # Get the current angle with 0.5 degree resolution
-#         print("In rotary", self.latest_angle)
         timestamp = int(t.time() * 1000)  # Get current time in milliseconds
-        new_data = pd.DataFrame({"timestamps": [timestamp], "values": [self.latest_angle]})
-        self.data = pd.concat([self.data, new_data], ignore_index = True)
-        self.latest_move_time = t.time()
-        if len(self.data) > 3000:
-            self.data = self.data.iloc[-3000:]
+        self.latest_value = round(self.encoder.steps * self.gain, 2)  # Get the current angle with 0.5 degree resolution
         
-    def get_latest_value(self):
-        return self.latest_angle
-
-    def get_latest(self):
-        return self.latest_angle, self.latest_move_time
+        self.latest_move_time = t.time()
+        
+        self.update_data(timestamp, self.latest_value)

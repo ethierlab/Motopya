@@ -14,7 +14,9 @@ import csv
 from datetime import datetime
 from datetime import timedelta
 import sys
-from utils import is_positive_float, is_int, is_boolean
+
+
+from ExLibs.utils import is_positive_float, is_int, is_boolean
 
 # Initialize trial parameters
 iniBaseline = 0
@@ -607,7 +609,7 @@ def animate(i):
         if main_functions["is_in_iti_period"]():
             return
         data = main_functions["get_data"]()
-        angles = np.array(data['values'])
+        angles = data['values']
         reference_time = main_functions["get_reference_time"]()
         adapted_threshold, adapted_time = main_functions["get_adapted_values"]()
         
@@ -637,8 +639,15 @@ def animate(i):
             ax.set_xlim(-1000, max(timestamps[-1], hit_duration * 1000) + 1000)
             timestamps = np.append(timestamps, (t.time() - reference_time) * 1000)
         if len(angles) > 0:
-            ax.set_ylim( -10, max(hit_threshold, max(angles)) + 50)  # Add some padding
-            angles = np.append(angles, angles[-1])
+            ax.set_ylim( -10, max(hit_threshold, angles.max()) + 50)  # Add some padding
+            try:
+                angles = np.append(angles, angles[len(angles) - 1])
+            except ValueError as e:
+                print(e)
+                print(angles)
+            except KeyError as e:
+                print(e)
+                print(angles)
         line.set_data(timestamps, angles)
         try:
             canvas.draw()

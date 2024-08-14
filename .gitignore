@@ -7,7 +7,7 @@ test.csv
 
 src/output_files
 src/parameters
-src/ads1015-python
+src/ExLibs/ads1015-python
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
