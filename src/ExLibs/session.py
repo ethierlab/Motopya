@@ -28,7 +28,7 @@ NEXT_STATE = CURRENT_STATE
 
 class Session():
     def __init__(self, init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration, iniBaseline, session_duration, hit_thresh_adapt, hit_thresh_min, hit_thresh_max,
-        hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials, input_device):
+        hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials, input_device, buzzer, light):
         self.init_threshold = init_threshold
         self.hit_duration = hit_duration
         self.hit_threshold = hit_threshold
@@ -47,6 +47,9 @@ class Session():
         self.drop_tolerance = drop_tolerance
         self.max_trials = max_trials
         self.input_device = input_device
+        self.buzzer = buzzer
+        self.light = light
+        buzzer.play_init()
         
         self.session_start = t.time()
         
@@ -161,7 +164,11 @@ class Session():
     def adapt_values(self, success):
         if success:
             self.num_success += 1
-            self.num_pellets +=1 
+            self.num_pellets +=1
+            self.buzzer.play_success()
+            self.light.flash()
+        else:
+            self.buzzer.play_failure()
             
         self.successes.append(success)
         average = self.get_success_average()

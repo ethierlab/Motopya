@@ -60,6 +60,9 @@ from ExLibs.session import Session
 from ExLibs.gui import start_gui
 from ExLibs.utils import is_positive_float
 from ExLibs.feeder import gpio_feed
+from ExLibs.buzzer import Buzzer
+from ExLibs.light import Light
+
 
 #Initialize Session object
 
@@ -323,18 +326,22 @@ def start_session():
     input_device.modify_gain(lever_gain)
     
     session = Session(init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration, iniBaseline, session_duration, hit_thresh_adapt, hit_thresh_min, hit_thresh_max,
-        hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials, input_device)
+        hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials, input_device, buzzer, light)
     
     running = True
 
-# Set up the rotary encoder
-# setup_encoder()
-
+buzzer = Buzzer(13)
+light = Light(19)
+light.flash()
 encoder = RotaryEncoder(1)
 encoder.setup_encoder()
 
 exit_program = False
 lever = Lever(1)
+
+
+
+
 def lever_loop():
     while True:
         if exit_program:
@@ -342,9 +349,11 @@ def lever_loop():
         lever.update_value()
         t.sleep(0.001)
         
+
 leverThread = threading.Thread(target=lever_loop)
 leverThread.start()
 input_device = lever
+    
 
 def get_data():
     return input_device.get_data()
