@@ -3,46 +3,34 @@ WELCOME TO MOTOPYA!
 This software is being created to accomplish tasks previously executed on Matlab with Mototrak devices. Instead of retrieving data using Matlab on the computer, this software is aimed to be used on either an arduino or raspberry pi in order to achieve faster data retrieval 
 and a more independant system. 
 
-Here are the usage directions for each option:
-
-ARDUINO:   
-  - SETUP 
-    - HARDWARE
-      - There are 3 components that need to be connected to the device:
-        1. Potentiometer (for the moment this mimics the use of the mototrak lever):
-            - "+" : 5V
-            - "-" : GND
-            - OUT: A0
-        2. Knob:
-            - "+" : 5V
-            - "-" : GND
-            - OUTA: pin 2
-            - OUTB: pin 3
-        3. Buzzer:
-            - "+" : GND
-            - "-" : pin 8
-   
-  - USAGE
-    - Run the GUI_tkinter python application and connect the arduino via USB-A to micro-USB cable.
-   
-
-
-
 RASPBERRY PI:   
   - SETUP 
     - HARDWARE
       - There are 3 components that need to be connected to the device:
         1. Potentiometer (for the moment this mimics the use of the mototrak lever):
-          Non-implemented
-    
+          - Using the ADS1015
+		- Lever to ADS1015:
+			- "+" : 3-5V
+			- "-" : GND
+			- OUT : A0
+		- ADS1015 to Raspbi GPIO:
+			- SCL : SCL
+			- SDA : SDA
+			- INT : #4
+			- 3-5V : 5.0V
+			- GND : GND
         2. Knob:
             - "+" : 5V
             - "-" : GND
-            - OUTA: pin 2
-            - OUTB: pin 25
+            - OUTA: #20
+            - OUTB: #21
         3. Buzzer:
-          Non-implemented
+            - "+" : #13
+            - "-" : GND
+	4. LED:
+            - "+" : #19
+            - "-" : GND
 
   - USAGE
-    - (currently) Run "socat -d -d pty,raw,echo=0 pty,raw,echo=0" in order to create virtual ports to communicate between python and c++ files. Make sure the ports listed are the ones used in each file.
-    - Run the GUI_tkinter python application and connect the arduino via USB-A to micro-USB cable.
+    - run "python main.py" in src folder
+	- if dependencies in "requirements.txt" are not installed, they will be auto-installed on runtime if there is an internet connection.

@@ -4,8 +4,13 @@ import threading
 import pkg_resources
 import subprocess
 import stat
+
 def install(package):
-    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+    result = subprocess.run([sys.executable, "-m", "pip", "install", package], capture_output=True, text=True)
+    
+    if "WARNING: Retrying" in result.stderr or "No internet connection" in result.stderr:
+        print("Installation failed due to a missing internet connection.")
+        sys.exit(1)
 
 def check_packages(do_install):
     with open('requirements.txt') as f:
