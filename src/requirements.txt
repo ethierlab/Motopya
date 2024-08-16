@@ -4,3 +4,4 @@ pandas
 gpiozero
 lgpio
 RPi.GPIO
+ads1015
