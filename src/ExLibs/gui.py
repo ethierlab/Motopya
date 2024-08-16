@@ -15,50 +15,18 @@ from datetime import datetime
 from datetime import timedelta
 import sys
 
-
 from ExLibs.utils import is_positive_float, is_int, is_boolean
 
-# Initialize trial parameters
-iniBaseline = 0
-session_duration = 30
-init_threshold = 50
-hit_duration = 5
-hit_threshold = 100
-hold_time = 1
-post_duration = 1
-iti = 1
-hit_thresh_adapt = False
-hit_thresh_min = 0
-hit_thresh_max = 1000
-hold_time_adapt = False
-hold_time_min = 0
-hold_time_max = 1000
-lever_gain = 1
-drop_tolerance = 1000
-max_trials = 100
-save_folder = ""
-ratID = 1
 
-
-canClose = True
 
 # Create the Tkinter application
 root = tk.Tk()
-root.title("Rotary Encoder Angle")
-
-# #_______________________________________________________________________________
-# GUI
-# création de l'interface avec titre et taille de la fenêtre
-
-# définition des valeurs modifiable par des entrés\
+root.title("Rat Task")
 
 session_running = False
 session_paused = False
-num_pellets = 0
-num_rewards = 0
-num_trials = 0
 
-session = {}
+# Define the values modified by entries
 parameters = {}
 
 parameters["iniThreshold"] = tk.StringVar(root) #0
@@ -69,7 +37,7 @@ parameters["hitThresh"] = tk.StringVar(root)#4
 parameters["hitThreshAdapt"] = tk.BooleanVar(root)#5
 parameters["hitThreshMin"] = tk.StringVar(root)#6
 parameters["hitThreshMax"] = tk.StringVar(root)#7
-parameters["leverGain"] = tk.StringVar(root)#8
+parameters["gain"] = tk.StringVar(root)#8
 parameters["forceDrop"] = tk.StringVar(root)#9
 parameters["maxTrials"] = tk.StringVar(root)#10
 parameters["holdTime"] = tk.StringVar(root)#11
@@ -82,6 +50,25 @@ parameters["inputType"] = tk.BooleanVar(root)
 parameters["iniBaseline"].set("1")
 
 
+def configure_rows(frame, max_rows, **kwargs):
+    for i in range(max_rows + 1):
+        frame.grid_rowconfigure(frame, max_rows, **kwargs)
+        
+def configure_columns(frame, max_rows, **kwargs):
+    for i in range(max_rows + 1):
+        frame.grid_columnconfigure(i, **kwargs)
+
+def refresh_input_text(frame, depth):
+    for child in frame.winfo_children():
+        if isinstance(child, (tk.Label)):
+            text = child.cget("text")
+            if not parameters["inputType"].get():
+                child.config(text=text.replace("(g)", "(deg)").replace("Pull", "Knob"))
+            else:
+                child.config(text=text.replace("(deg)", "(g)").replace("Knob", "Pull"))
+        elif isinstance(child, (tk.Frame)) and child != frame:
+            refresh_input_text(child, depth + 1)
+
 def set_text_bg(frame):
     # Get the background color of the frame
     bg_color = frame.cget("bg")
@@ -90,16 +77,11 @@ def set_text_bg(frame):
     for child in frame.winfo_children():
         if isinstance(child, (tk.Label, tk.Text, tk.Checkbutton)):
             child.config(bg=bg_color)
-        # if isinstance(child, (Label, Text, Entry, Checkbutton)):
-            # child.config(relief="solid")
         if isinstance(child, (tk.Entry)):
             child.config(width=6)
         if isinstance(child, (tk.Label)) and child["text"] not in ["min", "max", "adapt"]:
             child.config(anchor="e", justify=tk.RIGHT)
             child.grid(sticky="e")
-        # if isinstance(child, (Button)):
-            # child.config(justify=CENTER)
-            # child.grid(sticky="w")
             
             
 def set_button_size(frame, width, height, font):
@@ -125,24 +107,23 @@ def manage_threshold():
         max_thresh['state'] = tk.DISABLED
 
 def manage_time():
-    if min_time['state'] == tk.DISABLED and max_time['state'] == tk.DISABLED:
+    if min_time['state'] == tk.DISABLED and max_time_entry['state'] == tk.DISABLED:
         min_time['state'] = tk.NORMAL
-        max_time['state'] = tk.NORMAL
-    elif min_time['state'] == tk.NORMAL and max_time['state'] == tk.NORMAL:
+        max_time_entry['state'] = tk.NORMAL
+    elif min_time['state'] == tk.NORMAL and max_time_entry['state'] == tk.NORMAL:
         min_time['state'] = tk.DISABLED
-        max_time['state'] = tk.DISABLED
+        max_time_entry['state'] = tk.DISABLED
     
 
 def entry_changed(*args):
     global parameters
     parameters["iniBaseline"].set("1")
-    startButton.config(state="disabled")
+    start_button.config(state="disabled")
     for key, value in parameters.items():
         if not value.get() and not is_boolean(value.get()) and key not in ["saveFolder","holdTimeMin", "holdTimeMax", "hitThreshMax", "hitThreshMin"]:
             return False
-    #startButton.config(state="normal")
     for key, value in parameters.items():
-        if key in ["leverGain", "holdTime", "hitThresh"] :
+        if key in ["gain", "holdTime", "hitThresh"] :
             if not is_positive_float(value.get()):
                 return False
         elif key == "holdTimeAdapt":
@@ -156,50 +137,46 @@ def entry_changed(*args):
             elif bool(value.get()) == True and not (is_positive_float(parameters["hitThreshMin"].get()) and is_positive_float(parameters["hitThreshMax"].get())):
                 return False
             
-    startButton.config(state="normal")
+    start_button.config(state="normal")
     return True
 
 for value in parameters.values():
     value.trace_add("write", entry_changed)
 
-CadreGauche =tk.Frame(root)
-CadreGauche.grid(row=0, column=0, padx=20, pady=20)
+LeftFrame =tk.Frame(root)
+LeftFrame.grid(row=0, column=0, padx=20, pady=20)
+
 vertical_border =tk.Frame(root, width=1, bg="black")
 vertical_border.grid(row=0, column=1, sticky="ns")
-CadreDroite =tk.Frame(root)
-CadreDroite.grid(row=0, column=2, padx=20, pady=20)
+
+RightFrame =tk.Frame(root)
+RightFrame.grid(row=0, column=2, padx=20, pady=20)
+
+
+# Definition of title frame
+
+Title_Frame =tk.Frame(LeftFrame)
+Title_Frame.grid(row=1, column=1)
+
+
+# Title_______________________________________________________________
+title = tk.Label(Title_Frame, text="Rat Knob Task", fg='black', justify=tk.CENTER, font=("bold", 25), padx=5, pady=25, width=11, height=1).grid(row=1, column=2)
+
+# Information on the rat
+rat_id_label = tk.Label(Title_Frame, text="Rat ID:  ", font=("Serif", 11, "bold")).grid(row=2, column=0)
+rat_id_entry = tk.Entry(Title_Frame, width=10, textvariable=parameters["ratID"]).grid(row=2, column=1)
 
 # ________________________________________________________________
+# Definition of control buttons frame
 
-# définition du cadre de titre
+Control_Buttons_Frame =tk.Frame(LeftFrame)
+Control_Buttons_Frame.grid(row=3, column=1, sticky="n", pady=(20,20))
+Control_Buttons_Frame.grid_rowconfigure(0, pad=10,)
+configure_columns(Control_Buttons_Frame, 3, pad=10, weight=1)
 
-Cadre1 =tk.Frame(CadreGauche)
-Cadre1.grid(row=1, column=1)
 
-
-# Boutons de tests_______________________________________________________________
-Title = tk.Label(Cadre1, text="Rat Knob Task", fg='black', justify=tk.CENTER, font=("bold", 25), padx=5, pady=25, width=11, height=1).grid(row=1, column=2)
-# lamp = UILamp(Cadre1, diameter=32)
-# lamp.grid(row=2, column=4)
-# Connect = tk.Button(Cadre1, text="Connect Device", command=connectArduino, width=13, font= ("Serif", 11, "bold")).grid(row=2, column=5)
-# Retract = tk.Button(Cadre1, text="Retract\nSensor At Pos", state=tk.DISABLED).grid(row=2, column=5)
-
-# infos sur le rat et la sauvegarde des données
-Rat = tk.Label(Cadre1, text="Rat ID:  ", font=("Serif", 11, "bold")).grid(row=2, column=0)
-Rat_ID = tk.Entry(Cadre1, width=10, textvariable=parameters["ratID"]).grid(row=2, column=1)
-
-# ________________________________________________________________
-# définition du cadre de boutons
-
-Cadre2 =tk.Frame(CadreGauche)
-Cadre2.grid(row=3, column=1, sticky="n", pady=(20,20))
-Cadre2.grid_rowconfigure(0, pad=10,)
-Cadre2.grid_columnconfigure(0, pad=10, weight=1)
-Cadre2.grid_columnconfigure(1, pad=10, weight=1)
-Cadre2.grid_columnconfigure(2, pad=10, weight=1)
-Cadre2.grid_columnconfigure(3, pad=10, weight=1)
 timer_running = False
-_paused = False
+session_paused = False
 session_running = False
 
 def updateDisplayValues():
@@ -226,16 +203,15 @@ def chronometer(debut):
         timer_clock.config(text=f"{hours:02}:{minutes:02}:{seconds:02}")
         
 debut = t.time()
-def start_button():
-    # Déclenche la session comportement
+def start():
     global session_running, session, max_force, debut, session_paused, running
     session_paused = False
     session_running = True
     debut = t.time()
     start_trial()
     
-    startButton.config(command=pause_button, text="PAUSE")
-    stopButton.config(state = "normal")
+    start_button.config(command=pause_button, text="PAUSE")
+    stop_button.config(state = "normal")
     
         
 def pause_button():
@@ -243,27 +219,25 @@ def pause_button():
 
     session_paused = True
     pause_start = t.time()
-    # sendArduino('c')
-    startButton.config(command=resume_button, text="RESUME")
+    start_button.config(command=resume_button, text="RESUME")
     
     
 def resume_button():
     global session_paused, pause_time, running
     session_paused = False
 
-
-    startButton.config(command=pause_button, text="PAUSE")
+    start_button.config(command=pause_button, text="PAUSE")
     
-def stop_button():
+def stop():
     global session_running, session_paused, running
     main_functions["stop_session"]()
     session_paused = False
-    startButton.config(state="normal",command=start_button, text="START")
-    stopButton.config(state="disabled")
+    start_button.config(state="normal",command=start, text="START")
+    stop_button.config(state="disabled")
     finish_up(False)
     session_running = False
     
-def feed_button():
+def feed():
     main_functions["feed"]()
 
 def load_parameters_button():
@@ -288,10 +262,10 @@ def load_parameters_button():
         max_thresh.config(state="disabled")
     if bool(parameters["holdTimeAdapt"].get()):
         min_time.config(state="normal")
-        max_time.config(state="normal")
+        max_time_entry.config(state="normal")
     else:
         min_time.config(state="disabled")
-        max_time.config(state="disabled")
+        max_time_entry.config(state="disabled")
         
     refresh_input_text(root, 0)
     
@@ -316,7 +290,7 @@ def save_parameters_button():
     
 
 def clear_stats():
-    startButton.config(text="START")
+    start_button.config(text="START")
     
 
 def finish_up(crashed):
@@ -324,197 +298,163 @@ def finish_up(crashed):
     save_results(crashed)
     clear_stats()
 
-startButton = tk.Button(Cadre2, text="START", background='#64D413', state=tk.DISABLED, command=lambda: start_button())
-startButton.grid(row=0, column=0)
+start_button = tk.Button(Control_Buttons_Frame, text="START", background='#64D413', state=tk.DISABLED, command=lambda: start())
+start_button.grid(row=0, column=0)
 
-stopButton = tk.Button(Cadre2, text="STOP", background='red', state=tk.DISABLED, command=stop_button)
-stopButton.grid(row=0, column=1)
+stop_button = tk.Button(Control_Buttons_Frame, text="STOP", background='red', state=tk.DISABLED, command=stop)
+stop_button.grid(row=0, column=1)
 
     
-feedButton = tk.Button(Cadre2, text="FEED", background='#798FD4', state=tk.NORMAL, command=feed_button)
-feedButton.grid(row=0, column=2)
+feed_button = tk.Button(Control_Buttons_Frame, text="FEED", background='#798FD4', state=tk.NORMAL, command=feed)
+feed_button.grid(row=0, column=2)
 
-removeOffsetButton = tk.Button(Cadre2, text='Remove\nOffset', state=tk.DISABLED)
-removeOffsetButton.grid(row=0, column=3)
+removeOffset_button = tk.Button(Control_Buttons_Frame, text='Remove\nOffset', state=tk.DISABLED)
+removeOffset_button.grid(row=0, column=3)
 
 
-set_button_size(Cadre2, 10, 2, ('Serif', 10, "bold"))
+set_button_size(Control_Buttons_Frame, 10, 2, ('Serif', 10, "bold"))
 
 
 # ________________________________________________________________
-# définition du cadre d'information de trials
-# #infos sur les trials, rewards et temps passé
-Cadre3 =tk.Frame(CadreDroite)
-Cadre3.grid(row=1, column=2)
+# Definition of trial information frame
+Stats_Frame =tk.Frame(RightFrame)
+Stats_Frame.grid(row=1, column=2)
 
-Cadre3.grid_rowconfigure(0, pad=10,)
-Cadre3.grid_columnconfigure(0, pad=10, weight=1)
-Cadre3.grid_columnconfigure(1, pad=10, weight=1)
-Cadre3.grid_columnconfigure(2, pad=10, weight=1, minsize=100)
-Cadre3.grid_columnconfigure(3, pad=10, weight=1)
+Stats_Frame.grid_rowconfigure(0, pad=10,)
+configure_columns(Stats_Frame, 3, pad=10, weight=1)
+Stats_Frame.grid_columnconfigure(2, pad=10, weight=1, minsize=100)
 
 font = ("Serif", 12, "bold")
 
-TrialsLabel = tk.Label(Cadre3, text="Num Trials:", font=font)
+TrialsLabel = tk.Label(Stats_Frame, text="Num Trials:", font=font)
 TrialsLabel.grid(row=1, column=0)
-Trials = tk.Label(Cadre3, text="0", font=font)
+Trials = tk.Label(Stats_Frame, text="0", font=font)
 Trials.grid(row=1, column=1)
-RewardsLabel = tk.Label(Cadre3, text="Num Rewards:", font=font)
+RewardsLabel = tk.Label(Stats_Frame, text="Num Rewards:", font=font)
 RewardsLabel.grid(row=2, column=0)
-Rewards = tk.Label(Cadre3, text="0", font=font)
+Rewards = tk.Label(Stats_Frame, text="0", font=font)
 Rewards.grid(row=2, column=1)
-# Med_pick = tk.Label(Cadre3, text="Median Peak:", font="bold").grid(row=2, column=1)
-PelletLabel = tk.Label(Cadre3, text="Pellets delivered:", font=font)
+PelletLabel = tk.Label(Stats_Frame, text="Pellets delivered:", font=font)
 PelletLabel.grid(row=1, column=3)
-Pellet = tk.Label(Cadre3, text="0 (0.000 g)", font=font)
+Pellet = tk.Label(Stats_Frame, text="0 (0.000 g)", font=font)
 Pellet.grid(row=1, column=4)
-timer_label = tk.Label(Cadre3, text="Time elapsed:", font=("Serif", 14, weight:="bold"),fg="blue")
+timer_label = tk.Label(Stats_Frame, text="Time elapsed:", font=("Serif", 14, weight:="bold"),fg="blue")
 timer_label.grid(row=2, column=3)
-timer_clock = tk.Label(Cadre3, text="00:00:00", font=("Serif", 14,"bold"),fg="blue")
+timer_clock = tk.Label(Stats_Frame, text="00:00:00", font=("Serif", 14,"bold"),fg="blue")
 timer_clock.grid(row=2, column=4)
 
+# Med_pick = tk.Label(Stats_Frame, text="Median Peak:", font="bold").grid(row=2, column=1)
 
-set_sticky(Cadre3)
+set_sticky(Stats_Frame)
 
 # ________________________________________________________________
-# définition du cadre d'entrées de paramètres
+# Definition of parameters frame
 # --------------------------------
-Cadre4 =tk.Frame(CadreGauche)
-Cadre4.grid(row=2, column=1, padx=20, pady=(0, 20))
-# Cadre5.config(borderwidth=2, relief=RIDGE)
-Cadre4.config(relief=tk.RIDGE)
-Cadre5 =tk.Frame(Cadre4)
-Cadre5.grid(row=2, column=0)
-# Cadre5.config(borderwidth=2, relief=RIDGE)
-Cadre5.config(relief=tk.RIDGE, bg="#e0e0e0")
-Cadre5.grid_rowconfigure(0, pad=10,)
-Cadre5.grid_rowconfigure(1, pad=10)
-Cadre5.grid_rowconfigure(2, pad=10)
-Cadre5.grid_rowconfigure(3, pad=10)
-Cadre5.grid_rowconfigure(4, pad=10)
-Cadre5.grid_rowconfigure(5, pad=10)
-Cadre5.grid_rowconfigure(6, pad=10)
-Cadre5.grid_columnconfigure(0, pad=10, weight=1)
-Cadre5.grid_columnconfigure(1, pad=10, weight=1)
-Cadre5.grid_columnconfigure(2, pad=10, weight=1)
-Cadre5.grid_columnconfigure(3, pad=10, weight=1)
-Cadre5.grid_columnconfigure(4, pad=10, weight=1)
-Cadre5.grid_columnconfigure(5, pad=10, weight=1, minsize=60)
-Cadre5.grid_columnconfigure(6, pad=10, weight=1)
-border =tk.Frame(Cadre4, height=0.3, bg="black")
+Parameters_Frame =tk.Frame(LeftFrame)
+Parameters_Frame.grid(row=2, column=1, padx=20, pady=(0, 20))
+Parameters_Frame.config(relief=tk.RIDGE)
+
+Inner_Params_Frame =tk.Frame(Parameters_Frame)
+Inner_Params_Frame.grid(row=2, column=0)
+Inner_Params_Frame.config(relief=tk.RIDGE, bg="#e0e0e0")
+
+configure_rows(Inner_Params_Frame, 6, pad=10)
+configure_columns(Inner_Params_Frame, 6, pad=10, weight=1)
+Inner_Params_Frame.grid_columnconfigure(5, pad=10, weight=1, minsize=60)
+
+
+border =tk.Frame(Parameters_Frame, height=0.3, bg="black")
 border.grid(row=1, column=0, sticky="ew")
 
-Parametre = tk.Label(Cadre4, text="Parameters: ", fg='black', justify=tk.LEFT, font="bold").grid(row=0, column=0, sticky="w")
+parameter_label = tk.Label(Parameters_Frame, text="Parameters: ", fg='black', justify=tk.LEFT, font="bold").grid(row=0, column=0, sticky="w")
 
-Init_thresh = tk.Label(Cadre5, text="Init thresh (g):").grid(row=0, column=0)
-IT = tk.Entry(Cadre5, textvariable = parameters["iniThreshold"]).grid(row=0, column=1)
+init_thresh_label  = tk.Label(Inner_Params_Frame, text="Init thresh (g):").grid(row=0, column=0)
+init_thresh_entry = tk.Entry(Inner_Params_Frame, textvariable = parameters["iniThreshold"]).grid(row=0, column=1)
 
-Hit_window = tk.Label(Cadre5, text="Hit window (s):").grid(row=1, column=0)
-HW = tk.Entry(Cadre5, textvariable=parameters["hitWindow"]).grid(row=1, column=1)
+hit_window_label  = tk.Label(Inner_Params_Frame, text="Hit window (s):").grid(row=1, column=0)
+hit_window_entry = tk.Entry(Inner_Params_Frame, textvariable=parameters["hitWindow"]).grid(row=1, column=1)
 
-Duree = tk.Label(Cadre5, text="Max Duration (min):").grid(row=2, column=0)
-min_duration_entry = tk.Entry(Cadre5, textvariable=parameters["minDuration"]).grid(row=2, column=1)
+max_duration_label  = tk.Label(Inner_Params_Frame, text="Max Duration (min):").grid(row=2, column=0)
+max_duration_entry = tk.Entry(Inner_Params_Frame, textvariable=parameters["minDuration"]).grid(row=2, column=1)
 
-Lever_gain = tk.Label(Cadre5, text="Lever Gain :").grid(row=0, column=4, columnspan=2)
-Gain_entry = tk.Entry(Cadre5, textvariable=parameters["leverGain"]).grid(row=0, column=6)
+gain_label = tk.Label(Inner_Params_Frame, text="Gain :").grid(row=0, column=4, columnspan=2)
+gain_entry = tk.Entry(Inner_Params_Frame, textvariable=parameters["gain"]).grid(row=0, column=6)
 
-Drop_Tolerance = tk.Label(Cadre5, text="Force Drop Tolerance (g) :").grid(row=1, column=3, columnspan=3)
-Drop_entry = tk.Entry(Cadre5, textvariable=parameters["forceDrop"]).grid(row=1, column=6)
+drop_tolerance_label = tk.Label(Inner_Params_Frame, text="Force Drop Tolerance (g) :").grid(row=1, column=3, columnspan=3)
+drop_tolerance_entry = tk.Entry(Inner_Params_Frame, textvariable=parameters["forceDrop"]).grid(row=1, column=6)
 
-Max_Trials = tk.Label(Cadre5, text="Max Trials (num) :").grid(row=2, column=3, columnspan=3)
-Max_entry = tk.Entry(Cadre5, textvariable=parameters["maxTrials"]).grid(row=2, column=6)
-# Sensor_pos = tk.Label(Cadre5, text="Sensor pos (cm):").grid(row=3, column=1)
-# Sensor = tk.Entry(Cadre5).grid(row=3, column=2)
+max_trials_label = tk.Label(Inner_Params_Frame, text="Max Trials (num) :").grid(row=2, column=3, columnspan=3)
+max_trials_entry = tk.Entry(Inner_Params_Frame, textvariable=parameters["maxTrials"]).grid(row=2, column=6)
 
-# Init_baseline = tk.Label(Cadre5, text="Init baseline (g):").grid(row=3, column=5)
-# IB = tk.Entry(Cadre5, textvariable = iniBaseline).grid(row=3, column=6)
-
-adaptive = tk.Label(Cadre5, text="adapt").grid(row=3, column=2)
+adapt_label = tk.Label(Inner_Params_Frame, text="adapt").grid(row=3, column=2)
+min_label = tk.Label(Inner_Params_Frame, text="min").grid(row=3, column=3)
+max_label = tk.Label(Inner_Params_Frame, text="max").grid(row=3, column=4)
 
 
-# def adapt_thres():
-
-min_label = tk.Label(Cadre5, text="min").grid(row=3, column=3)
-min_thresh = tk.Entry(Cadre5, state=tk.DISABLED, textvariable=parameters["hitThreshMin"])
-min_thresh.grid(row=4, column=3)
-# min_ceiling = tk.Entry(Cadre5, state=tk.DISABLED).grid(row=6, column=4)
-min_time = tk.Entry(Cadre5, state=tk.DISABLED, textvariable=parameters["holdTimeMin"])
-min_time.grid(row=5, column=3)
-
-max_label = tk.Label(Cadre5, text="max").grid(row=3, column=4)
-max_thresh = tk.Entry(Cadre5, state=tk.DISABLED, textvariable=parameters["hitThreshMax"])
-max_thresh.grid(row=4, column=4)
-# max_ceiling = tk.Entry(Cadre5, state=tk.DISABLED).grid(row=6, column=5)
-max_time = tk.Entry(Cadre5, state=tk.DISABLED, textvariable=parameters["holdTimeMax"])
-max_time.grid(row=5, column=4)
+min_thresh_entry = tk.Entry(Inner_Params_Frame, state=tk.DISABLED, textvariable=parameters["hitThreshMin"])
+min_thresh_entry.grid(row=4, column=3)
 
 
-adapter_threshold = tk.IntVar()
-adapt_thresh = tk.Checkbutton(Cadre5, variable=parameters["hitThreshAdapt"], command=lambda: manage_threshold()).grid(row=4, column=2)  # command=manage_threshold
-# adapt_ceiling = Checkbutton(Cadre5, state=tk.DISABLED).grid(row=6, column=3)
-adapt_time = tk.Checkbutton(Cadre5, variable=parameters["holdTimeAdapt"], command=lambda: manage_time()).grid(row=5, column=2)
+min_time_entry = tk.Entry(Inner_Params_Frame, state=tk.DISABLED, textvariable=parameters["holdTimeMin"])
+min_time_entry.grid(row=5, column=3)
+
+# min_ceiling_entry = tk.Entry(Inner_Params_Frame, state=tk.DISABLED).grid(row=6, column=4)
+# min_ceiling_entry.grid(row=6, column=3)
+
+max_thresh_entry = tk.Entry(Inner_Params_Frame, state=tk.DISABLED, textvariable=parameters["hitThreshMax"])
+max_thresh_entry.grid(row=4, column=4)
 
 
+max_time_entry = tk.Entry(Inner_Params_Frame, state=tk.DISABLED, textvariable=parameters["holdTimeMax"])
+max_time_entry.grid(row=5, column=4)
 
-Hit_thresh = tk.Label(Cadre5, text="Hit Thresh (g):").grid(row=4, column=0)
-HThresh = tk.Entry(Cadre5, textvariable=parameters["hitThresh"]).grid(row=4, column=1)
+# max_ceiling_entry = tk.Entry(Inner_Params_Frame, state=tk.DISABLED).grid(row=6, column=5)
+# max_ceiling_entry.grid(row=5, column=4)
 
-# Hit_ceiling = tk.Label(Cadre5, text="Hit ceiling (deg):", state=tk.DISABLED).grid(row=6, column=1)
-# HC = tk.Entry(Cadre5, state=tk.DISABLED).grid(row=6, column=2)
+adapt_thresh_checkbox = tk.Checkbutton(Inner_Params_Frame, variable=parameters["hitThreshAdapt"], command=lambda: manage_threshold()).grid(row=4, column=2)  # command=manage_threshold
+adapt_time_checkbox = tk.Checkbutton(Inner_Params_Frame, variable=parameters["holdTimeAdapt"], command=lambda: manage_time()).grid(row=5, column=2)
 
-Hold_time = tk.Label(Cadre5, text="Hold time (s):").grid(row=5, column=0)
-HTime = tk.Entry(Cadre5, textvariable=parameters["holdTime"]).grid(row=5, column=1)
-
-loadParametersButton = tk.Button(Cadre5, text="Load", background='white', width=12, command=load_parameters_button)
-loadParametersButton.grid(row=6, column=3, columnspan=2)
-
-saveConfigurationButton = tk.Button(Cadre5, text="Save", background='white', width=10, command=save_parameters_button)
-saveConfigurationButton.grid(row=6, column=5, columnspan=2)
-
-set_text_bg(Cadre5)
-
-Cadre6 =tk.Frame(CadreDroite)
-Cadre6.grid(row=2, column=2)
-
-Title_array = tk.Label(Cadre6, text="Knob Rotation Angle").grid(row=1, column=1, columnspan=2, pady=2)
-# fig = plt.Figure(figsize=(3, 2), dpi=211, layout='constrained')
-# fig = plt.Figure(figsize=(3, 3), dpi=200)
-# ax = fig.add_subplot(111)
-
-# fig.patch.set_facecolor('#f0f0f0')
-# canvas = FigureCanvasTkAgg(fig, master=Cadre6)  # tk.DrawingArea.
-# canvas.get_tk_widget().grid(row=1, column=1, columnspan=2, sticky='E', pady=2)
+# adapt_ceiling_checkbox = Checkbutton(Inner_Params_Frame, state=tk.DISABLED).grid(row=6, column=3)
 
 
-Cadre7 =tk.Frame(CadreGauche)
-Cadre7.grid(row=4, column=1, sticky="n", pady=(20,20))
+hit_thresh_label = tk.Label(Inner_Params_Frame, text="Hit Thresh (g):").grid(row=4, column=0)
+hit_thresh_entry = tk.Entry(Inner_Params_Frame, textvariable=parameters["hitThresh"]).grid(row=4, column=1)
+
+# Hit_ceiling = tk.Label(Inner_Params_Frame, text="Hit ceiling (deg):", state=tk.DISABLED).grid(row=6, column=1)
+# HC = tk.Entry(Inner_Params_Frame, state=tk.DISABLED).grid(row=6, column=2)
+
+hold_time_label = tk.Label(Inner_Params_Frame, text="Hold time (s):").grid(row=5, column=0)
+hold_time_entry = tk.Entry(Inner_Params_Frame, textvariable=parameters["holdTime"]).grid(row=5, column=1)
+
+load_parameters_button = tk.Button(Inner_Params_Frame, text="Load", background='white', width=12, command=load_parameters_button)
+load_parameters_button.grid(row=6, column=3, columnspan=2)
+
+save_configuration_button = tk.Button(Inner_Params_Frame, text="Save", background='white', width=10, command=save_parameters_button)
+save_configuration_button.grid(row=6, column=5, columnspan=2)
+
+set_text_bg(Inner_Params_Frame)
+
+Graph_Frame =tk.Frame(RightFrame)
+Graph_Frame.grid(row=2, column=2)
+
+
+Lower_Left_Frame =tk.Frame(LeftFrame)
+Lower_Left_Frame.grid(row=4, column=1, sticky="n", pady=(20,20))
 
 def toggle_input_type():
     global parameters
     parameters["inputType"].set(not parameters["inputType"].get())
     refresh_input_text(root, 0)
         
-        
-def refresh_input_text(frame, depth):
-    for child in frame.winfo_children():
-        if isinstance(child, (tk.Label)):
-            text = child.cget("text")
-            if not parameters["inputType"].get():
-                child.config(text=text.replace("(g)", "(deg)").replace("Pull", "Knob"))
-            else:
-                child.config(text=text.replace("(deg)", "(g)").replace("Knob", "Pull"))
-        elif isinstance(child, (tk.Frame)) and child != frame:
-            refresh_input_text(child, depth + 1)
+toggle_type_button = tk.Button(Lower_Left_Frame, text='Toggle Input Type', command=lambda: toggle_input_type())
+toggle_type_button.grid(row=1, column=2)
 
-typeButton = tk.Button(Cadre7, text='Toggle Input Type', command=lambda: toggle_input_type())
-typeButton.grid(row=1, column=2)
-
-# Label qui montre des messages
-DisplayBox = tk.Label(Cadre7, text="", font=("Serif", 12))
-DisplayBox.grid(row=2, column=2, sticky="n", pady=(20,20))
+# Label that shows messages
+display_box = tk.Label(Lower_Left_Frame, text="", font=("Serif", 12))
+display_box.grid(row=2, column=2, sticky="n", pady=(20,20))
 
 def display(text):
-    DisplayBox.config(text=text)
+    display_box.config(text=text)
 
 def save_results(crashed):
     file_input_type = "_RatPull"
@@ -534,16 +474,16 @@ line, = ax.plot([], [], lw=2)
 ax.set_title("Motopya")
 ax.set_xlabel("Time (ms)")
 ax.set_ylabel("Angle (degrees)")
-init_threshold_line = ax.axhline(init_threshold, color='red', linestyle='--', label='Init Threshold')
-hit_threshold_line = ax.axhline(hit_threshold, color='green', linestyle='--', label='Hit Threshold')
+init_threshold_line = ax.axhline(parameters["iniThreshold"].get(), color='red', linestyle='--', label='Init Threshold')
+hit_threshold_line = ax.axhline(parameters["hitThresh"].get(), color='green', linestyle='--', label='Hit Threshold')
+hit_duration_line = ax.axvline(parameters["hitWindow"].get(), color='black', linestyle='--', label='Hit Duration', linewidth=0.25)
 zero_line = ax.axvline(0, color='black', linestyle='--', label='Zero', linewidth=0.25)
 zero_line = ax.axhline(0, color='black', linestyle='--', label='Zero', linewidth=0.25)
-hit_duration_line = ax.axvline(hit_threshold, color='black', linestyle='--', label='Hit Duration', linewidth=0.25)
+
 ax.legend()
 
 # Create a Matplotlib canvas and add it to the right frame
-canvas = FigureCanvasTkAgg(fig, master=Cadre6)
-# canvas.get_tk_widget().pack(fill=tk.BOTH, expand=1)
+canvas = FigureCanvasTkAgg(fig, master=Graph_Frame)
 canvas.get_tk_widget().grid(row=1, column=1, columnspan=2, sticky='E', pady=2)
 
 # Create parameter input fields
@@ -554,122 +494,58 @@ def create_parameter_input(frame, label, row, default_value):
     entry.insert(0, str(default_value))
     return entry
 
-# iti_entry = create_parameter_input(left_frame, "ITI (s):", 3, iti)
-
-# Start button
-
 def start_trial():
-    global init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration,iniBaseline, session_duration, hit_thresh_adapt, hit_thresh_min, hit_thresh_max
-    global hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials, save_folder, ratID
     init_threshold = float(parameters["iniThreshold"].get())
     hit_duration = float(parameters["hitWindow"].get())
     hit_threshold = float(parameters["hitThresh"].get())
-    # iti = float(iti_entry.get())
-    hold_time = float(parameters["holdTime"].get())
-    init_threshold_line.set_ydata([init_threshold, init_threshold])
-    hit_threshold_line.set_ydata([hit_threshold, hit_threshold])
-    hit_duration_line.set_xdata([hit_duration * 1000, hit_duration * 1000])
-    iniBaseline = float(parameters["iniBaseline"].get())
-    session_duration = float(parameters["minDuration"].get())
-    post_duration = float(1)
-    hit_thresh_adapt = bool(parameters["hitThreshAdapt"].get())
-    hit_thresh_min = float(parameters["hitThreshMin"].get()) if is_positive_float(parameters["hitThreshMin"].get()) else 0
-    hit_thresh_max = float(parameters["hitThreshMax"].get()) if is_positive_float(parameters["hitThreshMax"].get()) else 0
-    hold_time_adapt = bool(parameters["holdTimeAdapt"].get())
-    hold_time_min = float(parameters["holdTimeMin"].get()) if is_positive_float(parameters["holdTimeMin"].get()) else 0
-    hold_time_max = float(parameters["holdTimeMax"].get()) if is_positive_float(parameters["holdTimeMax"].get()) else 0
-    lever_gain = float(parameters["leverGain"].get())
-    drop_tolerance = float(parameters["forceDrop"].get())
-    max_trials = float(parameters["maxTrials"].get())
-    save_folder = str(parameters["saveFolder"].get())
-    input_type = bool(parameters["inputType"].get())
-    ratID = str(parameters["ratID"].get())
-
+    #Update lines on graph
     init_threshold_line.set_ydata([init_threshold, init_threshold])
     hit_threshold_line.set_ydata([hit_threshold, hit_threshold])
     hit_duration_line.set_xdata([hit_duration * 1000, hit_duration * 1000])
 
     ax.legend()  # Update legend
-    # reset_trial_counts()  # Reset trial counts
     
     
     main_functions["update_parameters"](get_parameters_list())
-    
     main_functions["start_session"]()  # Start the trials
-    
     canvas.draw()
 
 
 # Define an animation update function
 def animate(i):
-    global hit_threshold, hold_time
     if main_functions["is_running"]():
         updateDisplayValues()
+        chronometer(debut)
         # Check if in ITI period
         if main_functions["is_in_iti_period"]():
             return
         data = main_functions["get_data"]()
         angles = data['values']
         reference_time = main_functions["get_reference_time"]()
-        adapted_threshold, adapted_time = main_functions["get_adapted_values"]()
+        hit_threshold, hold_time = main_functions["get_adapted_values"]()
+
+        parameters["hitThresh"].set(hit_threshold)
+        parameters["holdTime"].set(hold_time)
+        init_threshold_line.set_ydata([parameters["iniThreshold"].get(), parameters["iniThreshold"].get()])
+        hit_threshold_line.set_ydata([hit_threshold, hit_threshold])
         
-        if adapted_threshold != None and adapted_time != None:
-            hit_threshold = adapted_threshold
-            hold_time = adapted_time
-            parameters["hitThresh"].set(hit_threshold)
-            parameters["holdTime"].set(hold_time)
-            init_threshold_line.set_ydata([init_threshold, init_threshold])
-            hit_threshold_line.set_ydata([hit_threshold, hit_threshold])
-        
-        # this is an uncessary loop that needs to be fixed, but good for testing purposes
-#         print(reference_time)
-#         timestamps = np.array(data['timestamps']) - reference_time * 1000
         timestamps = data['timestamps'].values - reference_time * 1000
-        
-        
-        
-        if len(timestamps) > len(angles):
-            timestamps = timestamps[:len(angles)]
-        elif len(angles) > len(timestamps):
-            angles = angles[:len(timestamps)]
-        
-        
         
         if len(timestamps) > 0:
             ax.set_xlim(-1000, max(timestamps[-1], hit_duration * 1000) + 1000)
             timestamps = np.append(timestamps, (t.time() - reference_time) * 1000)
         if len(angles) > 0:
             ax.set_ylim( -10, max(hit_threshold, angles.max()) + 50)  # Add some padding
-            try:
-                angles = np.append(angles, angles[len(angles) - 1])
-            except ValueError as e:
-                print(e)
-                print(angles)
-            except KeyError as e:
-                print(e)
-                print(angles)
+            angles = np.append(angles, angles[len(angles) - 1])
+            
         line.set_data(timestamps, angles)
-        try:
-            canvas.draw()
-        except:
-            pass
-        # Update trial counts
-        chronometer(debut)
+        canvas.draw()
     
-
-
-
-# Set button styles
-# style = ttk.Style()
-# style.configure("Start.TButton", foreground="green", font=("Helvetica", 12))
-# style.configure("Stop.TButton", foreground="red", font=("Helvetica", 12))
-
 ani = None
 
 # starts the GUI and takes the necessary functions to call with buttons
 
 main_functions = {}
-
 def start_gui(passed_functions):
     global ani, main_functions
     main_functions = passed_functions
@@ -678,17 +554,16 @@ def start_gui(passed_functions):
     ani = animation.FuncAnimation(fig, animate, interval=10, cache_frame_data=False)
 
     # Start the Tkinter main loop
-    # root.after(100, pause)  # Allow GPIOZero's pause function to run in the background
     root.protocol("WM_DELETE_WINDOW", on_closing)
     root.mainloop()
     return
 
+canClose = True
 def on_closing():
     global ani
     if not canClose:
         return
     main_functions["close"]()
-#     ani.event_source.stop()
     root.quit()
     root.destroy()
     return

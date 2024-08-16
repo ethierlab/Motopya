@@ -28,7 +28,7 @@ NEXT_STATE = CURRENT_STATE
 
 class Session():
     def __init__(self, init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration, iniBaseline, session_duration, hit_thresh_adapt, hit_thresh_min, hit_thresh_max,
-        hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials, input_device, buzzer, light):
+        hold_time_adapt, hold_time_min, hold_time_max, gain, drop_tolerance, max_trials, input_device, buzzer, light):
         self.init_threshold = init_threshold
         self.hit_duration = hit_duration
         self.hit_threshold = hit_threshold
@@ -43,7 +43,7 @@ class Session():
         self.hold_time_adapt = hold_time_adapt
         self.hold_time_min = hold_time_min
         self.hold_time_max = hold_time_max
-        self.lever_gain = lever_gain
+        self.gain = gain
         self.drop_tolerance = drop_tolerance
         self.max_trials = max_trials
         self.input_device = input_device
@@ -127,7 +127,7 @@ class Session():
             print("Trial started")
             
             self.trial = Trial(self.init_threshold, self.hit_duration, self.hit_threshold, self.hold_time, self.post_duration, self.iniBaseline,
-                          self.lever_gain, self.drop_tolerance, self.session_start, latest_time, self.input_device)
+                          self.gain, self.drop_tolerance, self.session_start, latest_time, self.input_device)
             self.trial.run()
             if self.trial.is_finished():
                 self.trial_table.append(self.trial.get_trial_data())

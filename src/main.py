@@ -88,7 +88,7 @@ hit_thresh_max = 1000
 hold_time_adapt = False
 hold_time_min = 0
 hold_time_max = 1000
-lever_gain = 1
+gain = 1
 drop_tolerance = 1000
 max_trials = 100
 save_folder = ""
@@ -111,7 +111,7 @@ parameters["hitThresh"] = 5 #4
 parameters["hitThreshAdapt"] = False #5
 parameters["hitThreshMin"] = 6 #6
 parameters["hitThreshMax"] = 7 #7
-parameters["leverGain"] = 8 #8
+parameters["gain"] = 8 #8
 parameters["forceDrop"] = 9 #9
 parameters["maxTrials"] = 10 #10
 parameters["holdTime"] = 11 #11
@@ -297,7 +297,7 @@ def start_session():
     global session, session_thread
     global running
     global init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration,iniBaseline, session_duration, hit_thresh_adapt, hit_thresh_min, hit_thresh_max
-    global hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials, save_folder, ratID
+    global hold_time_adapt, hold_time_min, hold_time_max, gain, drop_tolerance, max_trials, save_folder, ratID
     global input_device, lever, encoder
     init_threshold = float(parameters["iniThreshold"])
     hit_duration = float(parameters["hitWindow"])
@@ -314,7 +314,7 @@ def start_session():
     hold_time_adapt = bool(parameters["holdTimeAdapt"])
     hold_time_min = float(parameters["holdTimeMin"]) if is_positive_float(parameters["holdTimeMin"]) else 0
     hold_time_max = float(parameters["holdTimeMax"]) if is_positive_float(parameters["holdTimeMax"]) else 0
-    lever_gain = float(parameters["leverGain"])
+    gain = float(parameters["gain"])
     drop_tolerance = float(parameters["forceDrop"])
     max_trials = float(parameters["maxTrials"])
     save_folder = str(parameters["saveFolder"])
@@ -328,10 +328,10 @@ def start_session():
     else:
         input_device = encoder
     
-    input_device.modify_gain(lever_gain)
+    input_device.modify_gain(gain)
     
     session = Session(init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration, iniBaseline, session_duration, hit_thresh_adapt, hit_thresh_min, hit_thresh_max,
-        hold_time_adapt, hold_time_min, hold_time_max, lever_gain, drop_tolerance, max_trials, input_device, buzzer, light)
+        hold_time_adapt, hold_time_min, hold_time_max, gain, drop_tolerance, max_trials, input_device, buzzer, light)
     
     running = True
 
