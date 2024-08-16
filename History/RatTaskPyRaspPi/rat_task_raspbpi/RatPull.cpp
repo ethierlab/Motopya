@@ -260,7 +260,6 @@ long highest = 0;
 
 
 void getWaitTime(const chrono::high_resolution_clock::time_point& start) {
-  cout << "hi" << endl;
   auto timer = chrono::duration_cast<chrono::nanoseconds>(chrono::high_resolution_clock::now() - start).count();
   cout << "Wait time : " << timer << endl;
 }
@@ -352,8 +351,6 @@ void feed() {
 
 
 void tone(int pin, int frequency, double duration) {
-  cout << "ye" << endl;
-  //return;
   int halfPeriod = 1000000 / (2 * frequency);
   //int halfPeriod = 900000 / (2 * frequency);
   

@@ -151,7 +151,7 @@ private:
 
 int main() {
     try {
-        LS7366R encoder(0, 1000000, 4);
+        LS7366R encoder(0, 100000, 4);
 
         while (true) {
             std::cout << "Encoder count: " << encoder.readCounter() << " Press CTRL-C to terminate test program." << std::endl;
