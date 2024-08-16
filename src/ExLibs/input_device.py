@@ -17,6 +17,7 @@ class InputDevice(ABC):
         self.latest_value = 0
         self.latest_move_time = t.time()
         self.initial_time = None
+        self.offset = 0
         
     def get_latest(self):
         return self.latest_value, self.latest_move_time
@@ -42,6 +43,10 @@ class InputDevice(ABC):
     
     def modify_gain(self, gain):
         self.gain = gain
+        
+    def remove_offset(self):
+        self.offset += self.latest_value
+        print(self.offset)
     
 
 class Lever(InputDevice):
@@ -68,7 +73,7 @@ class Lever(InputDevice):
         try:
             self.latest_value = round(self.ads1015.get_compensated_voltage(
                 channel=self.CHANNELS[0], reference_voltage=self.reference
-            ) * self.gain, 2)
+            ) * self.gain - self.offset, 2)
     #         print("In lever", self.latest_value)
         except OSError:
             print("ADS disconnected")
@@ -98,7 +103,7 @@ class RotaryEncoder(InputDevice):
         
     def rotary_changed(self):
         timestamp = int(t.time() * 1000)  # Get current time in milliseconds
-        self.latest_value = round(self.encoder.steps * self.gain, 2)  # Get the current angle with 0.5 degree resolution
+        self.latest_value = round(self.encoder.steps * self.gain - self.offset, 2)  # Get the current angle with 0.5 degree resolution
         
         self.latest_move_time = t.time()
         

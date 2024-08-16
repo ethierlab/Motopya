@@ -52,7 +52,7 @@ parameters["iniBaseline"].set("1")
 
 def configure_rows(frame, max_rows, **kwargs):
     for i in range(max_rows + 1):
-        frame.grid_rowconfigure(frame, max_rows, **kwargs)
+        frame.grid_rowconfigure(i, **kwargs)
         
 def configure_columns(frame, max_rows, **kwargs):
     for i in range(max_rows + 1):
@@ -210,11 +210,11 @@ def start():
     debut = t.time()
     start_trial()
     
-    start_button.config(command=pause_button, text="PAUSE")
+    start_button.config(command=pause, text="PAUSE")
     stop_button.config(state = "normal")
     
         
-def pause_button():
+def pause():
     global session_paused, pause_start
 
     session_paused = True
@@ -222,11 +222,14 @@ def pause_button():
     start_button.config(command=resume_button, text="RESUME")
     
     
-def resume_button():
+def resume():
     global session_paused, pause_time, running
     session_paused = False
 
     start_button.config(command=pause_button, text="PAUSE")
+    
+def remove_offset():
+    main_functions["remove_offset"]()
     
 def stop():
     global session_running, session_paused, running
@@ -255,16 +258,16 @@ def load_parameters_button():
         parameters[key].set(parameters_list[i])
         
     if bool(parameters["hitThreshAdapt"].get()):
-        min_thresh.config(state="normal")
-        max_thresh.config(state="normal")
+        min_thresh_entry.config(state="normal")
+        max_thresh_entry.config(state="normal")
     else:
-        min_thresh.config(state="disabled")
-        max_thresh.config(state="disabled")
+        min_thresh_entry.config(state="disabled")
+        max_thresh_entry.config(state="disabled")
     if bool(parameters["holdTimeAdapt"].get()):
-        min_time.config(state="normal")
+        min_time_entry.config(state="normal")
         max_time_entry.config(state="normal")
     else:
-        min_time.config(state="disabled")
+        min_time_entry.config(state="disabled")
         max_time_entry.config(state="disabled")
         
     refresh_input_text(root, 0)
@@ -308,8 +311,8 @@ stop_button.grid(row=0, column=1)
 feed_button = tk.Button(Control_Buttons_Frame, text="FEED", background='#798FD4', state=tk.NORMAL, command=feed)
 feed_button.grid(row=0, column=2)
 
-removeOffset_button = tk.Button(Control_Buttons_Frame, text='Remove\nOffset', state=tk.DISABLED)
-removeOffset_button.grid(row=0, column=3)
+remove_offset_button = tk.Button(Control_Buttons_Frame, text='Remove\nOffset', command=remove_offset)
+remove_offset_button.grid(row=0, column=3)
 
 
 set_button_size(Control_Buttons_Frame, 10, 2, ('Serif', 10, "bold"))
@@ -526,13 +529,13 @@ def animate(i):
 
         parameters["hitThresh"].set(hit_threshold)
         parameters["holdTime"].set(hold_time)
-        init_threshold_line.set_ydata([parameters["iniThreshold"].get(), parameters["iniThreshold"].get()])
+        init_threshold_line.set_ydata([float(parameters["iniThreshold"].get()), float(parameters["iniThreshold"].get())])
         hit_threshold_line.set_ydata([hit_threshold, hit_threshold])
         
         timestamps = data['timestamps'].values - reference_time * 1000
         
         if len(timestamps) > 0:
-            ax.set_xlim(-1000, max(timestamps[-1], hit_duration * 1000) + 1000)
+            ax.set_xlim(-1000, max(timestamps[-1], float(parameters["hitWindow"].get()) * 1000) + 1000)
             timestamps = np.append(timestamps, (t.time() - reference_time) * 1000)
         if len(angles) > 0:
             ax.set_ylim( -10, max(hit_threshold, angles.max()) + 50)  # Add some padding

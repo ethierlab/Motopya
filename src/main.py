@@ -6,11 +6,16 @@ import subprocess
 import stat
 
 def install(package):
-    result = subprocess.run([sys.executable, "-m", "pip", "install", package], capture_output=True, text=True)
-    
-    if "WARNING: Retrying" in result.stderr or "No internet connection" in result.stderr:
-        print("Installation failed due to a missing internet connection.")
-        sys.exit(1)
+    try:
+        result = subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+    except Exception as e:
+        print("Installation was unsuccesseful. Verify internet connection and permissions")
+        print(e)
+#     result = subprocess.run([sys.executable, "-m", "pip", "install", package], capture_output=True, text=True)
+#     
+#     if "WARNING: Retrying" in result.stderr or "No internet connection" in result.stderr:
+#         print("Installation failed due to a missing internet connection.")
+#         sys.exit(1)
 
 def check_packages(do_install):
     with open('requirements.txt') as f:
@@ -412,6 +417,10 @@ def gui_feed():
         session.feed()
     else:
         gpio_feed()
+        
+def remove_offset():
+    print("removing_offset")
+    input_device.remove_offset()
 # start_session_func, stop_session_func, feed_func, load_parameters_func, save_parameters_func, get_data_func, save_session_data_func
 
 passed_functions = {
@@ -428,7 +437,8 @@ passed_functions = {
     'get_trial_counts': get_counts,
     'update_parameters': update_parameters,
     'close': close,
-    'is_running': is_running
+    'is_running': is_running,
+    'remove_offset': remove_offset
 }
 
 
