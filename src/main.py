@@ -342,9 +342,11 @@ encoder = RotaryEncoder(1)
 encoder.setup_encoder()
 
 exit_program = False
-lever = Lever(1)
-
-
+try:
+    lever = Lever(1)
+except OSError:
+    print("ADS1015 not connected")
+    sys.exit(1)
 
 
 def lever_loop():
