@@ -67,11 +67,12 @@ from datetime import timedelta
 
 from ExLibs.input_device import RotaryEncoder, Lever
 from ExLibs.session import Session
-from ExLibs.gui import start_gui
+# from ExLibs.gui import start_gui
 from ExLibs.utils import is_positive_float
 from ExLibs.feeder import gpio_feed
 from ExLibs.buzzer import Buzzer
 from ExLibs.light import Light
+from ExLibs.gui_class import RatTaskGUI
 
 
 #Initialize Session object
@@ -347,11 +348,12 @@ encoder = RotaryEncoder(1)
 encoder.setup_encoder()
 
 exit_program = False
+lever = None
 try:
     lever = Lever(1)
 except OSError:
     print("ADS1015 not connected")
-    sys.exit(1)
+#     sys.exit(1)
 
 
 def lever_loop():
@@ -361,12 +363,13 @@ def lever_loop():
         for i in range(250):
             lever.update_value()
             t.sleep(0.001)
-        
 
+input_device = encoder
 leverThread = threading.Thread(target=lever_loop)
-leverThread.start()
-input_device = lever
-    
+if lever != None:
+    leverThread.start()
+    input_device = lever
+        
 
 def get_data():
     return input_device.get_data()
@@ -398,7 +401,7 @@ def close():
     exit_program = True
     if logic:
         logic.join()
-    if leverThread:
+    if leverThread and leverThread.is_alive():
         leverThread.join()
     
 def get_reference():
@@ -443,13 +446,13 @@ passed_functions = {
 }
 
 
-
+gui = None
         
 def main():
-    global logic
+    global logic, gui
     logic = threading.Thread(target=run_logic)
     logic.start()
-    start_gui(passed_functions)
+    gui = RatTaskGUI(passed_functions)	
 
 if __name__ == "__main__":
     main()
