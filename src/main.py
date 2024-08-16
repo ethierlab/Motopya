@@ -358,8 +358,9 @@ def lever_loop():
     while True:
         if exit_program:
             break
-        lever.update_value()
-        t.sleep(0.001)
+        for i in range(250):
+            lever.update_value()
+            t.sleep(0.001)
         
 
 leverThread = threading.Thread(target=lever_loop)

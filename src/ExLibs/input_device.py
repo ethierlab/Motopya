@@ -68,16 +68,19 @@ class Lever(InputDevice):
 
 
     def update_value(self):
-    
         timestamp = int(t.time() * 1000)  # Get current time in milliseconds
         try:
-            self.latest_value = round(self.ads1015.get_compensated_voltage(
+            latest_value = round(self.ads1015.get_compensated_voltage(
                 channel=self.CHANNELS[0], reference_voltage=self.reference
-            ) * self.gain - self.offset, 2)
-    #         print("In lever", self.latest_value)
+            ) * self.gain - self.offset, 1)
         except OSError:
             print("ADS disconnected")
             return
+        
+        if self.latest_value == latest_value:
+            return
+        
+        self.latest_value = latest_value
         self.latest_move_time = t.time()
         
         self.update_data(timestamp, self.latest_value)
