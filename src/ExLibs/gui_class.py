@@ -65,14 +65,14 @@ class RatTaskGUI():
         self.create_frames()
         
         
-        
+        self.ani = animation.FuncAnimation(self.fig, self.animate, interval=10, cache_frame_data=False)
 
         # Start the Tkinter main loop
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         self.root.mainloop()
         
         # Create an animation
-        self.ani = animation.FuncAnimation(self.fig, self.animate, interval=10, cache_frame_data=False)
+        
         
     def create_frames(self):
         self.LeftFrame =tk.Frame(self.root)
@@ -374,7 +374,7 @@ class RatTaskGUI():
             self.pause_time += t.time() - self.pause_start
             self.pause_start = t.time()
         elif self.main_functions["is_running"]():
-            chrono_sec = t.time() - debut - pause_time
+            chrono_sec = t.time() - self.debut - self.pause_time
             chrono_timeLapse = timedelta(seconds=chrono_sec)
             hours, remainder = divmod(chrono_timeLapse.seconds, 3600)
             minutes, seconds = divmod(remainder, 60)
@@ -527,7 +527,7 @@ class RatTaskGUI():
     def animate(self, i):
         if self.main_functions["is_running"]():
             self.updateDisplayValues()
-            self.chronometer(debut)
+            self.chronometer(self.debut)
             # Check if in ITI period
             if self.main_functions["is_in_iti_period"]():
                 return
