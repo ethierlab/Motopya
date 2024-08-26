@@ -9,7 +9,7 @@ This software is being created to accomplish tasks previously executed on Matlab
 - Plug in the lever or knob into the "IN" port
 - Plug in the pellet feeder into the square port
 - Plug in the 12V power outlet to power the feeder
-- Refer to [this](../Docs/circuit_layout.pdf) diagram to use the output port
+- Refer to [this](Docs/circuit_layout.pdf) diagram to use the output port
 - LED: #19 + GND
 - BUZZER: #13 + GND
 #### CIRCUIT
