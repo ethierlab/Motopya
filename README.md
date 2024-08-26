@@ -40,7 +40,7 @@ This software is being created to accomplish tasks previously executed on Matlab
 
 ### SOFTWARE
 #### DOWNLOADING THE CODE
-- Open a terminal
+- Open a terminal (e.g., Tools -> Open Current Folder in Terminal)
 - Ensure there is an internet connection
 - run:
 
@@ -49,9 +49,12 @@ git clone https://github.com/ethierlab/Motopya.git
 ```
 
 #### Running the code
-- Go to the `src` folder.
-- Open the terminal in the `src` folder (e.g., Tools -> Open Current Folder in Terminal).
-- If there is no virtual environment named `venv`, create it with:
+- Go to the `src` folder, either using the explorer or by running:
+```bash
+cd Motopya/src
+```
+- Open a terminal in the `src` folder (e.g., Tools -> Open Current Folder in Terminal) if it's not already done.
+- If there is no virtual environment folder named `venv`, create it with:
 
 ```bash
 python3 -m venv venv
@@ -71,9 +74,17 @@ python main.py
 
 - If dependencies in `requirements.txt` are not installed, they will be auto-installed at runtime if there is an internet connection.
 
+- If you need to deactivate the venv, simply run:
+
+```bash
+deactivate
+```
+
 ## USAGE
 - Enter parameters into the text boxes or load them with the "load" button
 - Press Start button (ensure that the input device is at it's baseline in order for it to calibrate to 0)
 - Run session
 - When session is over (either from time, max trials or pressing stop button), save session by pressing "yes" when prompted
 - Files will be saved in "output_files" folder in a folder dedicated to each rat
+- You can save parameters using the save button
+- To change the type of input, use the type input toggle button
