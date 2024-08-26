@@ -134,10 +134,6 @@ class Trial():
 
     def get_end(self):
         return self.last_trial_end_time
-    def feed(self):
-        self.num_pellets += 1
-        gpio_feed()
-        return
     
     def get_success(self):
         return self.success

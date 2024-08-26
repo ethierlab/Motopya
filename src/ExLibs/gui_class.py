@@ -289,7 +289,7 @@ class RatTaskGUI():
                 else:
                     child.config(text=text.replace("(deg)", "(g)").replace("Knob", "Pull"))
             elif isinstance(child, (tk.Frame)) and child != frame:
-                refresh_input_text(child, depth + 1)
+                self.refresh_input_text(child, depth + 1)
 
     def set_text_bg(self, frame):
         # Get the background color of the frame
@@ -423,8 +423,8 @@ class RatTaskGUI():
         self.canClose = True
         if not file_path:
             return  # User canceled the dialog
-        success, message, parameters_list = main_functions["load_parameters"](file_path)
-        display(message)
+        success, message, parameters_list = self.main_functions["load_parameters"](file_path)
+        self.display(message)
         if not success:
             return
         for i, key in enumerate(self.parameters):
@@ -518,7 +518,7 @@ class RatTaskGUI():
         self.ax.legend()  # Update legend
         
         
-        self.main_functions["update_parameters"](get_parameters_list())
+        self.main_functions["update_parameters"](self.get_parameters_list())
         self.main_functions["start_session"]()  # Start the trials
         self.canvas.draw()
 
@@ -529,12 +529,12 @@ class RatTaskGUI():
             self.updateDisplayValues()
             self.chronometer(debut)
             # Check if in ITI period
-            if main_functions["is_in_iti_period"]():
+            if self.main_functions["is_in_iti_period"]():
                 return
             data = self.main_functions["get_data"]()
             angles = data['values']
-            reference_time = main_functions["get_reference_time"]()
-            hit_threshold, hold_time = main_functions["get_adapted_values"]()
+            reference_time = self.main_functions["get_reference_time"]()
+            hit_threshold, hold_time = self.main_functions["get_adapted_values"]()
 
             self.parameters["hitThresh"].set(hit_threshold)
             self.parameters["holdTime"].set(hold_time)

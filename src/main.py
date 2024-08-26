@@ -67,12 +67,12 @@ from datetime import timedelta
 
 from ExLibs.input_device import RotaryEncoder, Lever
 from ExLibs.session import Session
-# from ExLibs.gui import start_gui
+from ExLibs.gui import start_gui
 from ExLibs.utils import is_positive_float
 from ExLibs.feeder import gpio_feed
 from ExLibs.buzzer import Buzzer
 from ExLibs.light import Light
-from ExLibs.gui_class import RatTaskGUI
+# from ExLibs.gui_class import RatTaskGUI
 
 
 #Initialize Session object
@@ -452,7 +452,8 @@ def main():
     global logic, gui
     logic = threading.Thread(target=run_logic)
     logic.start()
-    gui = RatTaskGUI(passed_functions)	
+#     gui = RatTaskGUI(passed_functions)
+    start_gui(passed_functions)
 
 if __name__ == "__main__":
     main()

@@ -132,6 +132,8 @@ class Session():
             if self.trial.is_finished():
                 self.trial_table.append(self.trial.get_trial_data())
                 self.record_trial()
+                if self.trial.get_success():
+                    self.feed()
                 self.adapt_values(self.trial.get_success())
                
             
