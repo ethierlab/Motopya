@@ -68,7 +68,7 @@ from datetime import timedelta
 from ExLibs.input_device import RotaryEncoder, Lever
 from ExLibs.session import Session
 # from ExLibs.gui import start_gui
-from ExLibs.utils import is_positive_float
+from ExLibs.utils import is_positive_float, is_percentage_range
 from ExLibs.feeder import gpio_feed
 from ExLibs.buzzer import Buzzer
 from ExLibs.light import Light
@@ -109,24 +109,34 @@ num_trials = 0
 # session_info = {}
 parameters = {}
 
-parameters["iniThreshold"] = 1 #0
-parameters["iniBaseline"] = 2 #1
-parameters["minDuration"] = 3#2
-parameters["hitWindow"] = 4 #3
-parameters["hitThresh"] = 5 #4
+parameters["iniThreshold"] = 40 #0
+parameters["iniBaseline"] = 0 #1
+parameters["minDuration"] = 30#2
+parameters["hitWindow"] = 2 #3
+parameters["hitThresh"] = 100 #4
 parameters["hitThreshAdapt"] = False #5
-parameters["hitThreshMin"] = 6 #6
-parameters["hitThreshMax"] = 7 #7
-parameters["gain"] = 8 #8
-parameters["forceDrop"] = 9 #9
+parameters["hitThreshMin"] = 10 #6
+parameters["hitThreshMax"] = 100 #7
+parameters["gain"] = 1 #8
+parameters["useDropTol"] = False
+parameters["forceDrop"] = 1000 #9
 parameters["maxTrials"] = 10 #10
-parameters["holdTime"] = 11 #11
+parameters["holdTime"] = 1 #11
 parameters["holdTimeAdapt"] = False #12
-parameters["holdTimeMin"] = 12 #13
-parameters["holdTimeMax"] = 13 #14
+parameters["holdTimeMin"] = 0.7 #13
+parameters["holdTimeMax"] = 1.3 #14
 parameters["saveFolder"]  = "" #15
 parameters["ratID"] = "" #16
 parameters["inputType"] = True
+
+parameters["minThreshAdapt"] = 40
+parameters["maxThreshAdapt"] = 70
+
+parameters["minTimeAdapt"] = 40
+parameters["maxTimeAdapt"] = 70
+
+parameters["postTrialDuration"] = 1
+parameters["interTrialDuration"] = 1
 
 def gui_save_parameters(parameters_list, file_path):
     update_parameters(parameters_list)
@@ -154,6 +164,9 @@ def save_parameters(file_path):
 
     message = "Configuration saved"
     return message
+
+def get_parameters_list():
+    return list(parameters.values())
 
 def load_parameters(file_path):
     global parameters
@@ -308,12 +321,10 @@ def start_session():
     init_threshold = float(parameters["iniThreshold"])
     hit_duration = float(parameters["hitWindow"])
     hit_threshold = float(parameters["hitThresh"])
-    # iti = float(iti_entry)
-    iti = 1
+    inter_trial_duration = float(self.parameters["interTrialDuration"])
     hold_time = float(parameters["holdTime"])
     iniBaseline = float(parameters["iniBaseline"])
     session_duration = float(parameters["minDuration"])
-    post_duration = float(1)
     hit_thresh_adapt = bool(parameters["hitThreshAdapt"])
     hit_thresh_min = float(parameters["hitThreshMin"]) if is_positive_float(parameters["hitThreshMin"]) else 0
     hit_thresh_max = float(parameters["hitThreshMax"]) if is_positive_float(parameters["hitThreshMax"]) else 0
@@ -327,6 +338,14 @@ def start_session():
     ratID = str(parameters["ratID"])
     input_type = bool(parameters["inputType"])
     
+    min_thresh_adapt = float(self.parameters["minThreshAdapt"])
+    max_thresh_adapt = float(self.parameters["maxThreshAdapt"])
+
+    min_time_adapt = float(self.parameters["minTimeAdapt"])
+    max_time_adapt = float(self.parameters["maxTimeAdapt"])
+    
+    post_trial_duration = float(self.parameters["postTrialDuration"])
+    
     
     
     if (input_type):
@@ -336,8 +355,8 @@ def start_session():
     
     input_device.modify_gain(gain)
     
-    session = Session(init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration, iniBaseline, session_duration, hit_thresh_adapt, hit_thresh_min, hit_thresh_max,
-        hold_time_adapt, hold_time_min, hold_time_max, gain, drop_tolerance, max_trials, input_device, buzzer, light)
+    session = Session(init_threshold, hit_duration, hit_threshold, post_trial_duration, inter_trial_duration, hold_time, iniBaseline, session_duration, hit_thresh_adapt, hit_thresh_min, hit_thresh_max,
+    hold_time_adapt, hold_time_min, hold_time_max, gain, drop_tolerance, max_trials, input_device, buzzer, light, min_thresh_adapt, max_thresh_adapt, min_time_adapt, max_time_adapt)
     
     running = True
 
@@ -379,7 +398,6 @@ running = False
 
 def run_logic():
     global parameters, session
-    print("running logic")
     while True:
         if running and session != None and not session.is_running() and not session.is_done():
             print("starting session")
@@ -442,7 +460,8 @@ passed_functions = {
     'update_parameters': update_parameters,
     'close': close,
     'is_running': is_running,
-    'remove_offset': remove_offset
+    'remove_offset': remove_offset,
+    'get_parameters_list': get_parameters_list
 }
 
 

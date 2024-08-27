@@ -27,16 +27,16 @@ NEXT_STATE = CURRENT_STATE
 
 
 class Session():
-    def __init__(self, init_threshold, hit_duration, hit_threshold, iti, hold_time, post_duration, iniBaseline, session_duration, hit_thresh_adapt, hit_thresh_min, hit_thresh_max,
-        hold_time_adapt, hold_time_min, hold_time_max, gain, drop_tolerance, max_trials, input_device, buzzer, light):
+    def __init__(self, init_threshold, hit_duration, hit_threshold, post_trial_duration, inter_trial_duration, hold_time, iniBaseline, session_duration, hit_thresh_adapt, hit_thresh_min, hit_thresh_max,
+        hold_time_adapt, hold_time_min, hold_time_max, gain, drop_tolerance, max_trials, input_device, buzzer, light, min_thresh_adapt, max_thresh_adapt, min_time_adapt, max_time_adapt):
         self.init_threshold = init_threshold
         self.hit_duration = hit_duration
         self.hit_threshold = hit_threshold
-        self.iti = iti
+        self.post_trial_duration = post_trial_duration
+        self.inter_trial_duration = inter_trial_duration
         self.hold_time = hold_time
         self.iniBaseline = iniBaseline
         self.session_duration = session_duration
-        self.post_duration = post_duration
         self.hit_thresh_adapt = hit_thresh_adapt
         self.hit_thresh_min = hit_thresh_min
         self.hit_thresh_max = hit_thresh_max
@@ -49,6 +49,12 @@ class Session():
         self.input_device = input_device
         self.buzzer = buzzer
         self.light = light
+        
+        self.min_thresh_adapt = min_thresh_adapt
+        self.max_thresh_adapt = max_thresh_adapt
+        self.min_time_adapt = min_time_adapt
+        self.max_time_adapt = max_time_adapt
+        
         buzzer.play_init()
         
         self.session_start = t.time()
@@ -126,7 +132,7 @@ class Session():
             self.num_trials += 1
             print("Trial started")
             
-            self.trial = Trial(self.init_threshold, self.hit_duration, self.hit_threshold, self.hold_time, self.post_duration, self.iniBaseline,
+            self.trial = Trial(self.init_threshold, self.hit_duration, self.hit_threshold, self.hold_time, self.post_trial_duration, self.iniBaseline,
                           self.gain, self.drop_tolerance, self.session_start, latest_time, self.input_device)
             self.trial.run()
             if self.trial.is_finished():
@@ -144,7 +150,7 @@ class Session():
             self.input_device.clear_data()
             self.last_trial_end_time = self.trial.get_end()
         elif CURRENT_STATE == STATE_INTER_TRIAL:
-            if (self.current_time - self.last_trial_end_time) >= self.iti:
+            if (self.current_time - self.last_trial_end_time) >= self.inter_trial_duration:
                 print("turning false")
                 self.in_iti_period = False
                 self.NEXT_STATE = STATE_IDLE
@@ -174,17 +180,19 @@ class Session():
             
         self.successes.append(success)
         average = self.get_success_average()
-        if average >= 0.7:
-            if self.hit_thresh_adapt:
+        
+        if self.hit_thresh_adapt:
+            if average >= self.max_thresh_adapt:
                 self.hit_threshold = min(self.hit_thresh_max, self.hit_threshold + 10)
-            if self.hold_time_adapt:
+            elif average <= self.min_thresh_adapt:
+                self.hit_threshold = min(self.hit_thresh_max, self.hit_threshold - 10)
+                
+        if self.hold_time_adapt:
+            if average >= self.max_time_adapt:
                 self.hold_time = min(self.hold_time_max, round(self.hold_time + 0.1, 4))
-
-        if average <= 0.4:
-            if self.hit_thresh_adapt:
-                self.hit_threshold = max(self.hit_thresh_min, self.hit_threshold - 10)
-            if self.hold_time_adapt:
+            elif average <= self.min_time_adapt:
                 self.hold_time = max(self.hold_time_min, round(self.hold_time - 0.1, 4))
+                
                 
     def is_in_iti_period(self):
         return self.in_iti_period

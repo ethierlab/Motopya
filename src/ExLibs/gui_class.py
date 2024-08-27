@@ -15,13 +15,11 @@ from datetime import datetime
 from datetime import timedelta
 import sys
 
-from ExLibs.utils import is_positive_float, is_int, is_boolean
+from ExLibs.utils import is_positive_float, is_int, is_boolean, is_percentage_range, is_positive_range
 
 class RatTaskGUI():
     def __init__(self, passed_functions):
         self.main_functions = passed_functions
-        print(self.main_functions.keys())
-#         print(passed_functions)
         
         # Create the Tkinter application
         self.root = tk.Tk()
@@ -41,6 +39,7 @@ class RatTaskGUI():
         self.parameters["hitThreshMin"] = tk.StringVar(self.root)#6
         self.parameters["hitThreshMax"] = tk.StringVar(self.root)#7
         self.parameters["gain"] = tk.StringVar(self.root)#8
+        self.parameters["useDropTol"] = tk.BooleanVar(self.root)
         self.parameters["forceDrop"] = tk.StringVar(self.root)#9
         self.parameters["maxTrials"] = tk.StringVar(self.root)#10
         self.parameters["holdTime"] = tk.StringVar(self.root)#11
@@ -52,8 +51,20 @@ class RatTaskGUI():
         self.parameters["inputType"] = tk.BooleanVar(self.root)
         self.parameters["iniBaseline"].set("1")
         
+        self.parameters["minThreshAdapt"] = tk.StringVar(self.root)
+        self.parameters["maxThreshAdapt"] = tk.StringVar(self.root)
+        
+        self.parameters["minTimeAdapt"] = tk.StringVar(self.root)
+        self.parameters["maxTimeAdapt"] = tk.StringVar(self.root)
+        
+        self.parameters["postTrialDuration"] = tk.StringVar(self.root)
+        self.parameters["interTrialDuration"] = tk.StringVar(self.root)
+        
         for value in self.parameters.values():
             value.trace_add("write", self.entry_changed)
+            
+        
+            
         self.debut = t.time()
         self.ani = None
         self.canClose = True
@@ -65,13 +76,16 @@ class RatTaskGUI():
         self.create_frames()
         
         
+        parameters_list = self.main_functions["get_parameters_list"]()
+        for i, key in enumerate(self.parameters):
+            self.parameters[key].set(parameters_list[i])
+        
+        
         self.ani = animation.FuncAnimation(self.fig, self.animate, interval=10, cache_frame_data=False)
 
         # Start the Tkinter main loop
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         self.root.mainloop()
-        
-        # Create an animation
         
         
     def create_frames(self):
@@ -171,7 +185,7 @@ class RatTaskGUI():
         self.border =tk.Frame(self.parameters_Frame, height=0.3, bg="black")
         self.border.grid(row=1, column=0, sticky="ew")
 
-        self.parameter_label = tk.Label(self.parameters_Frame, text="parameters: ", fg='black', justify=tk.LEFT, font="bold").grid(row=0, column=0, sticky="w")
+        self.parameter_label = tk.Label(self.parameters_Frame, text="Parameters: ", fg='black', justify=tk.LEFT, font="bold").grid(row=0, column=0, sticky="w")
 
         self.init_thresh_label  = tk.Label(self.Inner_Params_Frame, text="Init thresh (g):").grid(row=0, column=0)
         self.init_thresh_entry = tk.Entry(self.Inner_Params_Frame, textvariable = self.parameters["iniThreshold"]).grid(row=0, column=1)
@@ -181,20 +195,26 @@ class RatTaskGUI():
 
         self.max_duration_label  = tk.Label(self.Inner_Params_Frame, text="Max Duration (min):").grid(row=2, column=0)
         self.max_duration_entry = tk.Entry(self.Inner_Params_Frame, textvariable=self.parameters["minDuration"]).grid(row=2, column=1)
+        
+        self.max_trials_label = tk.Label(self.Inner_Params_Frame, text="Max Trials (num) :").grid(row=0, column=2, columnspan=2)
+        self.max_trials_entry = tk.Entry(self.Inner_Params_Frame, textvariable=self.parameters["maxTrials"]).grid(row=0, column=4)
 
         self.gain_label = tk.Label(self.Inner_Params_Frame, text="Gain :").grid(row=0, column=4, columnspan=2)
         self.gain_entry = tk.Entry(self.Inner_Params_Frame, textvariable=self.parameters["gain"]).grid(row=0, column=6)
+        
+        self.tolerance_label = tk.Label(self.Inner_Params_Frame, text="Tolerance:").grid(row=1, column=2, columnspan=2)
+        self.tolerance_checkbox = tk.Checkbutton(self.Inner_Params_Frame, variable=self.parameters["useDropTol"]).grid(row=1, column=4)
 
-        self.drop_tolerance_label = tk.Label(self.Inner_Params_Frame, text="Force Drop Tolerance (g) :").grid(row=1, column=3, columnspan=3)
+        self.drop_tolerance_label = tk.Label(self.Inner_Params_Frame, text="Drop (g) :").grid(row=1, column=4, columnspan=2)
         self.drop_tolerance_entry = tk.Entry(self.Inner_Params_Frame, textvariable=self.parameters["forceDrop"]).grid(row=1, column=6)
 
-        self.max_trials_label = tk.Label(self.Inner_Params_Frame, text="Max Trials (num) :").grid(row=2, column=3, columnspan=3)
-        self.max_trials_entry = tk.Entry(self.Inner_Params_Frame, textvariable=self.parameters["maxTrials"]).grid(row=2, column=6)
+        
 
         self.adapt_label = tk.Label(self.Inner_Params_Frame, text="adapt").grid(row=3, column=2)
         self.min_label = tk.Label(self.Inner_Params_Frame, text="min").grid(row=3, column=3)
         self.max_label = tk.Label(self.Inner_Params_Frame, text="max").grid(row=3, column=4)
-
+        self.min_adapt_label = tk.Label(self.Inner_Params_Frame, text="Raise (%)").grid(row=3, column=5)
+        self.max_adapt_label = tk.Label(self.Inner_Params_Frame, text="Lower (%)").grid(row=3, column=6)
 
         self.min_thresh_entry = tk.Entry(self.Inner_Params_Frame, state=tk.DISABLED, textvariable=self.parameters["hitThreshMin"])
         self.min_thresh_entry.grid(row=4, column=3)
@@ -212,7 +232,24 @@ class RatTaskGUI():
 
         self.max_time_entry = tk.Entry(self.Inner_Params_Frame, state=tk.DISABLED, textvariable=self.parameters["holdTimeMax"])
         self.max_time_entry.grid(row=5, column=4)
+        
+        
+        
+        self.min_thresh_adapt_entry = tk.Entry(self.Inner_Params_Frame, state=tk.DISABLED, textvariable=self.parameters["minThreshAdapt"])
+        self.min_thresh_adapt_entry.grid(row=4, column=5)
 
+
+        self.min_time_adapt_entry = tk.Entry(self.Inner_Params_Frame, state=tk.DISABLED, textvariable=self.parameters["minTimeAdapt"])
+        self.min_time_adapt_entry.grid(row=5, column=5)
+
+
+        self.max_thresh_adapt_entry = tk.Entry(self.Inner_Params_Frame, state=tk.DISABLED, textvariable=self.parameters["maxThreshAdapt"])
+        self.max_thresh_adapt_entry.grid(row=4, column=6)
+
+
+        self.max_time_adapt_entry = tk.Entry(self.Inner_Params_Frame, state=tk.DISABLED, textvariable=self.parameters["maxTimeAdapt"])
+        self.max_time_adapt_entry.grid(row=5, column=6)
+        
         # max_ceiling_entry = tk.Entry(self.Inner_Params_Frame, state=tk.DISABLED).grid(row=6, column=5)
         # max_ceiling_entry.grid(row=5, column=4)
 
@@ -231,11 +268,14 @@ class RatTaskGUI():
         self.hold_time_label = tk.Label(self.Inner_Params_Frame, text="Hold time (s):").grid(row=5, column=0)
         self.hold_time_entry = tk.Entry(self.Inner_Params_Frame, textvariable=self.parameters["holdTime"]).grid(row=5, column=1)
 
-        self.load_parameters_button = tk.Button(self.Inner_Params_Frame, text="Load", background='white', width=12, command=self.load_parameters_button)
-        self.load_parameters_button.grid(row=6, column=3, columnspan=2)
+        self.load_parameters = tk.Button(self.Inner_Params_Frame, text="Load", background='white', width=12, command=self.load_parameters_button)
+        self.load_parameters.grid(row=6, column=0, columnspan=2)
 
         self.save_configuration_button = tk.Button(self.Inner_Params_Frame, text="Save", background='white', width=10, command=self.save_parameters_button)
-        self.save_configuration_button.grid(row=6, column=5, columnspan=2)
+        self.save_configuration_button.grid(row=6, column=2, columnspan=2)
+        
+        self.advanced_configuration_button = tk.Button(self.Inner_Params_Frame, text="Advanced", background='white', width=10, command=self.open_advanced)
+        self.advanced_configuration_button.grid(row=6, column=5, columnspan=2)
 
         self.set_text_bg(self.Inner_Params_Frame)
 
@@ -263,8 +303,8 @@ class RatTaskGUI():
         self.init_threshold_line = self.ax.axhline(self.parameters["iniThreshold"].get(), color='red', linestyle='--', label='Init Threshold')
         self.hit_threshold_line = self.ax.axhline(self.parameters["hitThresh"].get(), color='green', linestyle='--', label='Hit Threshold')
         self.hit_duration_line = self.ax.axvline(self.parameters["hitWindow"].get(), color='black', linestyle='--', label='Hit Duration', linewidth=0.25)
-        self.zero_line = self.ax.axvline(0, color='black', linestyle='--', label='Zero', linewidth=0.25)
-        self.zero_line = self.ax.axhline(0, color='black', linestyle='--', label='Zero', linewidth=0.25)
+        self.zero_line = self.ax.axvline(0, color='black', linestyle='--', linewidth=0.25)
+        self.zero_line = self.ax.axhline(0, color='black', linestyle='--', linewidth=0.25)
 
         self.ax.legend()
 
@@ -321,41 +361,61 @@ class RatTaskGUI():
                 child.grid(sticky="w")
                 
     def manage_threshold(self):
-        if self.min_thresh['state'] == tk.DISABLED and self.max_thresh['state'] == tk.DISABLED:
-            self.min_thresh['state'] = tk.NORMAL
-            self.max_thresh['state'] = tk.NORMAL
-        elif self.min_thresh['state'] == tk.NORMAL and self.max_thresh['state'] == tk.NORMAL:
-            self.min_thresh['state'] = tk.DISABLED
-            self.max_thresh['state'] = tk.DISABLED
+        if self.min_thresh_entry['state'] == tk.DISABLED and self.max_thresh_entry['state'] == tk.DISABLED:
+            self.min_thresh_entry['state'] = tk.NORMAL
+            self.max_thresh_entry['state'] = tk.NORMAL
+            self.min_thresh_adapt_entry['state'] = tk.NORMAL
+            self.max_thresh_adapt_entry['state'] = tk.NORMAL
+        elif self.min_thresh_entry['state'] == tk.NORMAL and self.max_thresh_entry['state'] == tk.NORMAL:
+            self.min_thresh_entry['state'] = tk.DISABLED
+            self.max_thresh_entry['state'] = tk.DISABLED
+            self.min_thresh_adapt_entry['state'] = tk.DISABLED
+            self.max_thresh_adapt_entry['state'] = tk.DISABLED
 
     def manage_time(self):
-        if self.min_time['state'] == tk.DISABLED and self.max_time_entry['state'] == tk.DISABLED:
-            self.min_time['state'] = tk.NORMAL
+        if self.min_time_entry['state'] == tk.DISABLED and self.max_time_entry['state'] == tk.DISABLED:
+            self.min_time_entry['state'] = tk.NORMAL
             self.max_time_entry['state'] = tk.NORMAL
-        elif self.min_time['state'] == tk.NORMAL and self.max_time_entry['state'] == tk.NORMAL:
-            self.min_time['state'] = tk.DISABLED
+            self.min_time_adapt_entry['state'] = tk.NORMAL
+            self.max_time_adapt_entry['state'] = tk.NORMAL
+        elif self.min_time_entry['state'] == tk.NORMAL and self.max_time_entry['state'] == tk.NORMAL:
+            self.min_time_entry['state'] = tk.DISABLED
             self.max_time_entry['state'] = tk.DISABLED
+            self.min_time_adapt_entry['state'] = tk.DISABLED
+            self.max_time_adapt_entry['state'] = tk.DISABLED
         
 
     def entry_changed(self, *args):
         self.parameters["iniBaseline"].set("1")
         self.start_button.config(state="disabled")
+        self.refresh_input_text(self.root, 0)
         for key, value in self.parameters.items():
-            if not value.get() and not is_boolean(value.get()) and key not in ["saveFolder","holdTimeMin", "holdTimeMax", "hitThreshMax", "hitThreshMin"]:
+            if not value.get() and not is_boolean(value.get()) and key not in ["saveFolder","holdTimeMin", "holdTimeMax", "hitThreshMax", "hitThreshMin", "forceDrop"]:
                 return False
         for key, value in self.parameters.items():
-            if key in ["gain", "holdTime", "hitThresh"] :
+            if key in ["gain", "holdTime", "hitThresh", "postTrialDuration", "interTrialDuration"] :
                 if not is_positive_float(value.get()):
                     return False
             elif key == "holdTimeAdapt":
                 if not (is_boolean(value.get())):
                     return False
-                elif bool(value.get()) == True and not (is_positive_float(self.parameters["holdTimeMin"].get()) and is_positive_float(self.parameters["holdTimeMax"].get())):
+                elif (bool(value.get()) == True and not (is_positive_range(self.parameters["holdTimeMin"].get(),self.parameters["holdTimeMax"].get()) and
+                is_percentage_range(self.parameters["minTimeAdapt"].get(), self.parameters["maxTimeAdapt"].get())) ):
                     return False
             elif key == "hitThreshAdapt":
                 if not (is_boolean(value.get())):
                     return False
-                elif bool(value.get()) == True and not (is_positive_float(self.parameters["hitThreshMin"].get()) and is_positive_float(self.parameters["hitThreshMax"].get())):
+                elif (bool(value.get()) == True and not (is_positive_range(self.parameters["hitThreshMin"].get(),self.parameters["hitThreshMax"].get()) and
+                is_percentage_range(self.parameters["minThreshAdapt"].get(), self.parameters["maxThreshAdapt"].get()))):
+                    return False
+            elif key == "useDropTol":
+                if not (is_boolean(value.get())):
+                    return False
+                elif (bool(value.get()) == True and not (is_positive_float(self.parameters["forceDrop"].get()))):
+                    return False
+            elif key not in ["saveFolder","holdTimeMin", "holdTimeMax", "hitThreshMax", "hitThreshMin", "forceDrop"]:
+                if not (is_int(value.get())):
+                    print(key)
                     return False
                 
         self.start_button.config(state="normal")
@@ -552,6 +612,9 @@ class RatTaskGUI():
                 
             self.line.set_data(timestamps, angles)
             self.canvas.draw()
+            
+    def open_advanced(self):
+        Advanced_Window(self)
         
 
 
@@ -574,26 +637,46 @@ class Advanced_Window():
         self.parameters = gui.parameters
         self.popup = tk.Toplevel(gui.root)
         self.popup.title("Modify Parameters")
-        self.popup.geometry("300x200")
+        self.popup.geometry("400x400")
 
-        self.frame = tk.Frame(self.popup, padx=10, pady=10)
-        self.frame.pack(fill="both", expand=True)
+        
 
         self.popup.grab_set()
+        
+        self.canvas = tk.Canvas(self.popup)
+        self.scrollbar = tk.Scrollbar(self.popup, orient="vertical", command =self.canvas.yview)
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        
+        self.frame = tk.Frame(self.canvas, padx=10, pady=10)
+        self.canvas.create_window((0,0), window=self.frame, anchor="nw")
+        
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.scrollbar.pack(side="right", fill="y")
+        
+        self.add_parameters()
+        
+        self.frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+        
+#         self.frame.pack(fill="both", expand=True)
+        
+        
         self.popup.protocol("WM_DELETE_WINDOW", self.on_close)
+        
+        
 
     def add_parameters(self):
-        items = list(self.parameters)
-        for i in range(len(items)):
-            key, parameter = items[i]
+        i = 0
+        for key, parameter in self.parameters.items():
             tk.Label(self.frame, text=key).grid(row=i, column=0, stick=tk.W, pady=2)
             if isinstance(parameter, tk.BooleanVar):
                 entry = tk.Checkbutton(self.frame, variable=self.parameters[key])
                 entry.grid(row=i, column=1, pady=2)
-            elif isinstance(parameter, tk.StringVar):
+            elif isinstance(parameter, tk.StringVar): 
                 entry = tk.Entry(self.frame, textvariable=self.parameters[key])
                 entry.grid(row=i, column=1, pady=2)
-        
+            i += 1
+        height = str(min(len(self.parameters) * 30, 600))
+#         self.popup.geometry("400x" + height)
 
 
 
