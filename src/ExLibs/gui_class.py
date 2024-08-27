@@ -324,7 +324,7 @@ class RatTaskGUI():
         if self.min_thresh['state'] == tk.DISABLED and self.max_thresh['state'] == tk.DISABLED:
             self.min_thresh['state'] = tk.NORMAL
             self.max_thresh['state'] = tk.NORMAL
-        elif min_thresh['state'] == tk.NORMAL and self.max_thresh['state'] == tk.NORMAL:
+        elif self.min_thresh['state'] == tk.NORMAL and self.max_thresh['state'] == tk.NORMAL:
             self.min_thresh['state'] = tk.DISABLED
             self.max_thresh['state'] = tk.DISABLED
 
@@ -459,7 +459,7 @@ class RatTaskGUI():
         if not file_path:
             return  # User canceled the dialog
         
-        parameters_list = get_parameters_list()
+        parameters_list = self.get_parameters_list()
         
         self.display(self.main_functions["save_parameters"](parameters_list, file_path))
         
@@ -565,4 +565,46 @@ class RatTaskGUI():
         self.root.quit()
         self.root.destroy()
         return
+    
+
+
+class Advanced_Window():
+    def __init__(self, gui):
+        self.gui = gui
+        self.parameters = gui.parameters
+        self.popup = tk.Toplevel(gui.root)
+        self.popup.title("Modify Parameters")
+        self.popup.geometry("300x200")
+
+        self.frame = tk.Frame(self.popup, padx=10, pady=10)
+        self.frame.pack(fill="both", expand=True)
+
+        self.popup.grab_set()
+        self.popup.protocol("WM_DELETE_WINDOW", self.on_close)
+
+    def add_parameters(self):
+        items = list(self.parameters)
+        for i in range(len(items)):
+            key, parameter = items[i]
+            tk.Label(self.frame, text=key).grid(row=i, column=0, stick=tk.W, pady=2)
+            if isinstance(parameter, tk.BooleanVar):
+                entry = tk.Checkbutton(self.frame, variable=self.parameters[key])
+                entry.grid(row=i, column=1, pady=2)
+            elif isinstance(parameter, tk.StringVar):
+                entry = tk.Entry(self.frame, textvariable=self.parameters[key])
+                entry.grid(row=i, column=1, pady=2)
+        
+
+
+
+    def create_parameter_input(self, frame, label, row, default_value):
+        tk.Label(frame, text=label).grid(row=row, column=0, sticky=tk.W, pady=2)
+        entry = ttk.Entry(frame)
+        entry.grid(row=row, column=1, pady=2)
+        entry.insert(0, str(default_value))
+        return entry
+
+    def on_close(self):
+        self.popup.grab_release()
+        self.popup.destroy()
         

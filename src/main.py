@@ -207,7 +207,7 @@ debut = t.time()
 def start():
     # Déclenche la session comportement
     global session_running, session, max_force, debut
-    initialize_session(parameters["hitThresh"], float(parameters["holdTime"]) * 1000)
+    # initialize_session(parameters["hitThresh"], float(parameters["holdTime"]) * 1000)
     
     session_running = True
     debut = t.time()
