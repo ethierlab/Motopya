@@ -4,6 +4,7 @@ from tkinter import messagebox
 import tkinter.font as font
 import os
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.animation as animation
 import threading
@@ -574,6 +575,19 @@ class RatTaskGUI():
         self.init_threshold_line.set_ydata([init_threshold, init_threshold])
         self.hit_threshold_line.set_ydata([hit_threshold, hit_threshold])
         self.hit_duration_line.set_xdata([hit_duration * 1000, hit_duration * 1000])
+        
+        print(self.parameters["interTrialDuration"].get())
+        print(int(self.parameters["hitWindow"].get()) + int(self.parameters["interTrialDuration"].get()))
+        
+        xticks = np.arange(-1000, (int(self.parameters["hitWindow"].get()) + int(self.parameters["interTrialDuration"].get())) * 1000, 500)
+        self.ax.set_xticks(xticks)
+        formatted_ticks = [f'{tick:.0f}' for tick in xticks]
+        self.ax.set_xticklabels(formatted_ticks)
+        
+        yticks = np.arange(-10, int(float(self.parameters["hitThresh"].get())) + 50, 10)
+        self.ax.set_yticks(yticks)
+        formatted_ticks = [f'{tick:.0f}' for tick in yticks]
+        self.ax.set_yticklabels(formatted_ticks)
 
         self.ax.legend()  # Update legend
         
@@ -603,14 +617,26 @@ class RatTaskGUI():
             
             timestamps = data['timestamps'].values - reference_time * 1000
             
+            
             if len(timestamps) > 0:
                 self.ax.set_xlim(-1000, max(timestamps[-1], float(self.parameters["hitWindow"].get()) * 1000) + 1000)
+#                 self.ax.set_xticks(range(0, int(self.parameters["hitWindow"].get() * 1000) + 1000, 10))
+#                 self.ax.set_xticks(range(0, 6000 + 1000, 100))
+                
                 timestamps = np.append(timestamps, (t.time() - reference_time) * 1000)
             if len(angles) > 0:
                 self.ax.set_ylim( -10, max(hit_threshold, angles.max()) + 50)  # Add some padding
+                if (list(angles)[-1] > int(float(self.parameters["hitThresh"].get()))):
+                    yticks = np.arange(-5, int(angles.max()) + 50, round(angles.max() / 10 / 5) * 5)
+                    self.ax.set_yticks(yticks)
+                    formatted_ticks = [f'{tick:.0f}' for tick in yticks]
+                    self.ax.set_yticklabels(formatted_ticks)
                 angles = np.append(angles, angles[len(angles) - 1])
                 
             self.line.set_data(timestamps, angles)
+#             self.ax.plot(timestamps, angles)
+            
+            
             self.canvas.draw()
             
     def open_advanced(self):
