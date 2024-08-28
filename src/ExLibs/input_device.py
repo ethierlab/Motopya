@@ -106,8 +106,7 @@ class RotaryEncoder(InputDevice):
         
     def rotary_changed(self):
         timestamp = int(t.time() * 1000)  # Get current time in milliseconds
-        self.latest_value = round(self.encoder.steps * self.gain - self.offset, 2)  # Get the current angle with 0.5 degree resolution
-        
+        self.latest_value = round(self.encoder.steps * self.gain * -1 - self.offset, 2)  # Get the current angle with 0.5 degree resolution
         self.latest_move_time = t.time()
         
         self.update_data(timestamp, self.latest_value)

@@ -25,13 +25,13 @@ NEXT_STATE = CURRENT_STATE
 
 class Trial():
     def __init__(self, init_threshold, hit_duration, hit_threshold, hold_time,
-                 post_duration, iniBaseline,gain, drop_tolerance, session_start, reference_time, input_device):
+                 post_trial_duration, iniBaseline,gain, drop_tolerance, session_start, reference_time, input_device):
         
         self.init_threshold = init_threshold
         self.hit_duration = hit_duration
         self.hit_threshold = hit_threshold
         self.hold_time = hold_time
-        self.post_duration = post_duration
+        self.post_trial_duration = post_trial_duration
         self.iniBaseline = iniBaseline
         self.gain = gain
         self.drop_tolerance = drop_tolerance
@@ -96,7 +96,7 @@ class Trial():
             if self.post_trial_start is None:
                 print("POST")
                 self.post_trial_start = current_time
-            elif current_time - self.post_trial_start >= self.post_duration:
+            elif current_time - self.post_trial_start >= self.post_trial_duration:
                 self.last_trial_end_time = current_time
                 self.record_trial()
                 self.trial_running = False
@@ -134,10 +134,6 @@ class Trial():
 
     def get_end(self):
         return self.last_trial_end_time
-    def feed(self):
-        self.num_pellets += 1
-        gpio_feed()
-        return
     
     def get_success(self):
         return self.success
