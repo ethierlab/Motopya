@@ -287,14 +287,16 @@ def save_session_data():
     gfname = parameters["ratID"] + '_global_stats.csv'
     save_trial_table(os.path.join(rat_dir, ttfname))
     save_session_parameters(os.path.join(rat_dir, pfname), parameters)
-
+    update_global_stats(os.path.join(rat_dir, gfname))
     message = 'Behavior stats and parameters saved successfully'
         
     return True, message
     
 
 def update_global_stats(filename):
+    print("updating global")
     session_info = session.get_session()
+    print(session_info)
 
     exists = os.path.isfile(filename)
     try:
@@ -321,7 +323,7 @@ def start_session():
     init_threshold = float(parameters["iniThreshold"])
     hit_duration = float(parameters["hitWindow"])
     hit_threshold = float(parameters["hitThresh"])
-    inter_trial_duration = float(self.parameters["interTrialDuration"])
+    inter_trial_duration = float(parameters["interTrialDuration"])
     hold_time = float(parameters["holdTime"])
     iniBaseline = float(parameters["iniBaseline"])
     session_duration = float(parameters["minDuration"])
@@ -338,13 +340,13 @@ def start_session():
     ratID = str(parameters["ratID"])
     input_type = bool(parameters["inputType"])
     
-    min_thresh_adapt = float(self.parameters["minThreshAdapt"])
-    max_thresh_adapt = float(self.parameters["maxThreshAdapt"])
+    min_thresh_adapt = float(parameters["minThreshAdapt"])
+    max_thresh_adapt = float(parameters["maxThreshAdapt"])
 
-    min_time_adapt = float(self.parameters["minTimeAdapt"])
-    max_time_adapt = float(self.parameters["maxTimeAdapt"])
+    min_time_adapt = float(parameters["minTimeAdapt"])
+    max_time_adapt = float(parameters["maxTimeAdapt"])
     
-    post_trial_duration = float(self.parameters["postTrialDuration"])
+    post_trial_duration = float(parameters["postTrialDuration"])
     
     
     
