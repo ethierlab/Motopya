@@ -7,6 +7,7 @@ from datetime import timedelta
 import RPi.GPIO as GPIO
 
 from ExLibs.feeder import  gpio_feed
+from ExLibs.clock import clock
 
 STATE_IDLE = 0
 STATE_TRIAL_INIT = 1 #probably not necessary
@@ -48,17 +49,17 @@ class Trial():
         self.input_device = input_device
         
     def run(self):
-        print("trial started")
+        print("Trial started")
         while self.trial_running:
             self.trial_logic()
             t.sleep(0.001)
-        print("done running trial")
+        print("Trial ended")
             
     def stop(self):
         self.trial_running = False
         
     def trial_logic(self):
-        current_time = t.time()
+        current_time = clock.time()
         
         latest_value, latest_time = self.input_device.get_latest()
         
@@ -69,11 +70,9 @@ class Trial():
         if CURRENT_STATE == STATE_TRIAL_STARTED:
             # Check for trial timeout
             if current_time - self.reference_time >= self.hit_duration and latest_value < self.hit_threshold:
-                print("time fail")
                 self.NEXT_STATE = STATE_FAILURE
             # Check for hit threshold
             elif latest_value <= self.peak_value - self.drop_tolerance:
-                print("drop fail")
                 self.NEXT_STATE = STATE_FAILURE
             elif latest_value >= self.hit_threshold:
                 self.hit_start_time = current_time
@@ -84,17 +83,16 @@ class Trial():
             elif current_time - self.hit_start_time >= self.hold_time:
                 self.NEXT_STATE = STATE_SUCCESS
         elif CURRENT_STATE == STATE_SUCCESS:
-            print("Success")
+            print("SUCCESS")
             self.success = True
             self.last_trial_end_time = current_time
             self.NEXT_STATE = STATE_POST_TRIAL
         elif CURRENT_STATE == STATE_FAILURE:
-            print("Fail")
+            print("FAIL")
             self.last_trial_end_time = current_time
             self.NEXT_STATE = STATE_POST_TRIAL
         elif CURRENT_STATE == STATE_POST_TRIAL:
             if self.post_trial_start is None:
-                print("POST")
                 self.post_trial_start = current_time
             elif current_time - self.post_trial_start >= self.post_trial_duration:
                 self.last_trial_end_time = current_time

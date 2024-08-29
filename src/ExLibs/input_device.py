@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-import time as t
+from ExLibs.clock import clock
 
 from ads1015 import ADS1015
 
@@ -15,10 +15,11 @@ class InputDevice(ABC):
         self.gain = gain
         self.data = pd.DataFrame(columns=["timestamps", "values"])
         self.latest_value = 0
-        self.latest_move_time = t.time()
+        self.latest_move_time = clock.time()
         self.initial_time = None
         self.offset = 0
-        
+        self.remove_offset()
+            
     def get_latest(self):
         return self.latest_value, self.latest_move_time
     
@@ -46,7 +47,6 @@ class InputDevice(ABC):
         
     def remove_offset(self):
         self.offset += self.latest_value
-        print(self.offset)
     
 
 class Lever(InputDevice):
@@ -68,7 +68,9 @@ class Lever(InputDevice):
 
 
     def update_value(self):
-        timestamp = int(t.time() * 1000)  # Get current time in milliseconds
+        if clock.is_paused():
+            return
+        timestamp = int(clock.time() * 1000)  # Get current time in milliseconds
         try:
             latest_value = round(self.ads1015.get_compensated_voltage(
                 channel=self.CHANNELS[0], reference_voltage=self.reference
@@ -81,10 +83,9 @@ class Lever(InputDevice):
             return
         
         self.latest_value = latest_value
-        self.latest_move_time = t.time()
+        self.latest_move_time = clock.time()
         
         self.update_data(timestamp, self.latest_value)
-        
         
         
         
@@ -100,13 +101,15 @@ class RotaryEncoder(InputDevice):
         self.encoder = None
         
     def setup_encoder(self):
-        self.initial_time = t.time()
+        self.initial_time = clock.time()
         self.encoder = RotaryEncoder2(self.encoder_a, self.encoder_b, max_steps=360,half_step=True)
         self.encoder.when_rotated = self.rotary_changed
         
     def rotary_changed(self):
-        timestamp = int(t.time() * 1000)  # Get current time in milliseconds
+        if clock.is_paused():
+            return
+        timestamp = int(clock.time() * 1000)  # Get current time in milliseconds
         self.latest_value = round(self.encoder.steps * self.gain * -1 - self.offset, 2)  # Get the current angle with 0.5 degree resolution
-        self.latest_move_time = t.time()
+        self.latest_move_time = clock.time()
         
         self.update_data(timestamp, self.latest_value)

@@ -11,11 +11,6 @@ def install(package):
     except Exception as e:
         print("Installation was unsuccesseful. Verify internet connection and permissions")
         print(e)
-#     result = subprocess.run([sys.executable, "-m", "pip", "install", package], capture_output=True, text=True)
-#     
-#     if "WARNING: Retrying" in result.stderr or "No internet connection" in result.stderr:
-#         print("Installation failed due to a missing internet connection.")
-#         sys.exit(1)
 
 def check_packages(do_install):
     with open('requirements.txt') as f:
@@ -73,6 +68,7 @@ from ExLibs.feeder import gpio_feed
 from ExLibs.buzzer import Buzzer
 from ExLibs.light import Light
 from ExLibs.gui_class import RatTaskGUI
+from ExLibs.clock import clock
 
 
 #Initialize Session object
@@ -205,40 +201,18 @@ def load_parameters(file_path):
     return True, message, list(parameters.values())
 
 timer_running = False
-session_paused = False
 session_running = False
-    
-def resume():
-    global session_paused
-    global pause_time
-    session_paused = False
 
-pause_start = t.time()
-pause_time = 0
         
-debut = t.time()
 def start():
-    # Déclenche la session comportement
-    global session_running, session, max_force, debut
-    # initialize_session(parameters["hitThresh"], float(parameters["holdTime"]) * 1000)
-    
+    global session_running
     session_running = True
-    debut = t.time()
-    
-        
-def pause():
-    global session_paused
-    global pause_start
-    pause_start = t.time()
-    session_paused = True
 
 # Function to stop the trials
 def stop_session():
-    print("stopping session")
     global running, session
     if session != None:
         session.stop()
-#     session = None
     running = False
     
 def save_trial_table(filename):
@@ -294,9 +268,8 @@ def save_session_data():
     
 
 def update_global_stats(filename):
-    print("updating global")
+    
     session_info = session.get_session()
-    print(session_info)
 
     exists = os.path.isfile(filename)
     try:
@@ -402,7 +375,6 @@ def run_logic():
     global parameters, session
     while True:
         if running and session != None and not session.is_running() and not session.is_done():
-            print("starting session")
             session.start()
         if exit_program:
             break
@@ -411,10 +383,16 @@ def run_logic():
 logic = None
 
 def is_running():
-    global running
-    return running
+    if session != None:
+        return session.is_running()
+    return False
+
+def session_done():
+    if session != None:
+        return session.is_done()
+    return False
+
 def close():
-    print("Closing")
     global exit_program, running
     stop_session()
     running = False
@@ -443,7 +421,6 @@ def gui_feed():
         gpio_feed()
         
 def remove_offset():
-    print("removing_offset")
     input_device.remove_offset()
 # start_session_func, stop_session_func, feed_func, load_parameters_func, save_parameters_func, get_data_func, save_session_data_func
 
@@ -463,7 +440,8 @@ passed_functions = {
     'close': close,
     'is_running': is_running,
     'remove_offset': remove_offset,
-    'get_parameters_list': get_parameters_list
+    'get_parameters_list': get_parameters_list,
+    'session_done': session_done
 }
 
 
