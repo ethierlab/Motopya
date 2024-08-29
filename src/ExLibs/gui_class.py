@@ -17,7 +17,7 @@ from datetime import datetime
 from datetime import timedelta
 import sys
 
-from ExLibs.utils import is_positive_float, is_int, is_boolean, is_percentage_range, is_positive_range
+from ExLibs.utils import is_float, is_positive_float, is_int, is_boolean, is_percentage_range, is_positive_range
 
 class RatTaskGUI():
     def __init__(self, passed_functions):
@@ -275,10 +275,13 @@ class RatTaskGUI():
         self.load_parameters.grid(row=6, column=0, columnspan=2)
 
         self.save_configuration_button = tk.Button(self.Inner_Params_Frame, text="Save", background='white', width=10, command=self.save_parameters_button)
-        self.save_configuration_button.grid(row=6, column=2, columnspan=2)
+        self.save_configuration_button.grid(row=7, column=0, columnspan=2)
+        
+        self.calibrate_lever_button = tk.Button(self.Inner_Params_Frame, text="Calibrate Lever", background='white', width=10, command=self.open_calibration, state=tk.DISABLED)
+        self.calibrate_lever_button.grid(row=6, column=5, columnspan=2)
         
         self.advanced_configuration_button = tk.Button(self.Inner_Params_Frame, text="Advanced", background='white', width=10, command=self.open_advanced)
-        self.advanced_configuration_button.grid(row=6, column=5, columnspan=2)
+        self.advanced_configuration_button.grid(row=7, column=5, columnspan=2)
 
         self.set_text_bg(self.Inner_Params_Frame)
 
@@ -324,6 +327,11 @@ class RatTaskGUI():
             frame.grid_columnconfigure(i, **kwargs)
 
     def refresh_input_text(self, frame, depth):
+        if self.parameters["inputType"].get():
+            self.calibrate_lever_button.config(state="normal")
+        else:
+            self.calibrate_lever_button.config(state="disabled")
+        
         for child in frame.winfo_children():
             if isinstance(child, (tk.Label)):
                 text = child.cget("text")
@@ -396,8 +404,11 @@ class RatTaskGUI():
             if not value.get() and not is_boolean(value.get()) and key not in ["saveFolder","holdTimeMin", "holdTimeMax", "hitThreshMax", "hitThreshMin", "forceDrop"]:
                 return False
         for key, value in self.parameters.items():
-            if key in ["gain", "holdTime", "hitThresh", "postTrialDuration", "interTrialDuration", "minDuration"] :
+            if key in ["holdTime", "hitThresh", "postTrialDuration", "interTrialDuration", "minDuration"] :
                 if not is_positive_float(value.get()):
+                    return False
+            elif key in ["gain"] :
+                if not is_float(value.get()):
                     return False
             elif key == "holdTimeAdapt":
                 if not (is_boolean(value.get())):
@@ -637,8 +648,14 @@ class RatTaskGUI():
             self.canvas.draw()
             self.stop()
             
+    def set_gain(self, gain):
+        self.parameters["gain"].set(gain)
+            
     def open_advanced(self):
         Advanced_Window(self)
+        
+    def open_calibration(self):
+        Calibration_Window(self, self.main_functions["get_lever_value"], self.set_gain, self.parameters["gain"].get())
         
 
 
@@ -713,4 +730,74 @@ class Advanced_Window():
     def on_close(self):
         self.popup.grab_release()
         self.popup.destroy()
+        
+        
+class Calibration_Window():
+    def __init__(self, gui, get_lever_value, set_gain, gain):
+        
+        self.root = gui.root
+        self.popup = tk.Toplevel(self.root)
+        self.popup.title("Force Calibration")
+        self.popup.geometry("750x600")
+        
+        self.popup.grab_set()
+        
+        self.get_lever_value = get_lever_value
+        self.set_gain = set_gain
+        self.gain = gain
+        self.ratios = []
+        self.data = []
+        tk.Label(self.popup, text="Known Force (g):").grid(row=0, column=0)
+        self.force_entry = tk.Entry(self.popup)
+        self.force_entry.grid(row=0, column=1)
+        
+        self.add_button = tk.Button(self.popup, text="Add Data Point", command=self.add_data_point)
+        self.add_button.grid(row=2, column=0, columnspan=2)
+        
+        self.gain_label = tk.Label(self.popup, text="")
+        self.gain_label.grid(row=4, column=0, columnspan=2)
+        
+        self.gain_label.config(text="Gain: " + str(self.gain))
+        
+        
+        self.fig, self.ax = plt.subplots()
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self.popup)
+        self.canvas_widget = self.canvas.get_tk_widget()
+        self.canvas_widget.grid(row=5, column=0, columnspan=2)
+        
+        
+    def add_data_point(self):
+        try:
+            force = float(self.force_entry.get())
+            analog_value = float(self.get_lever_value())
+            if (analog_value != 0):
+                ratio = force / analog_value
+                self.data.append((analog_value, force))
+                self.ratios.append(ratio)
+                self.gain = sum(self.ratios) / len(self.ratios)
+                self.set_gain(self.gain)
+            
+            self.gain_label.config(text="Gain: " + str(self.gain) + " Analog : " + str(analog_value))
+        except ValueError:
+            print("Input Error", "Please enter valid number for force")
+            
+        self.plot_data()
+            
+    def plot_data(self):
+        if not self.data:
+            return
+        
+        self.ax.clear()
+        sorted_data = sorted(self.data)
+        x,y = zip(*sorted_data)
+        
+        self.ax.plot(x,y, 'o-', label="Force vs Analog Value")
+        self.ax.set_xlabel("Analog Value")
+        self.ax.set_ylabel("Force (grams)")
+        self.ax.set_title("Calibration Plot")
+        self.ax.legend()
+        
+        
+        self.canvas.draw()
+        
         

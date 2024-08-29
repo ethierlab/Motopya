@@ -286,6 +286,9 @@ def update_global_stats(filename):
 
 session_thread = None
 
+def get_lever_value():
+    return lever.get_value()
+
 # Function to start the trials
 def start_session():
     global session, session_thread
@@ -339,7 +342,6 @@ buzzer = Buzzer(13)
 light = Light(19)
 light.flash()
 encoder = RotaryEncoder(1)
-encoder.setup_encoder()
 
 exit_program = False
 lever = None
@@ -441,7 +443,8 @@ passed_functions = {
     'is_running': is_running,
     'remove_offset': remove_offset,
     'get_parameters_list': get_parameters_list,
-    'session_done': session_done
+    'session_done': session_done,
+    'get_lever_value': get_lever_value
 }
 
 
