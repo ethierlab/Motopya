@@ -1,5 +1,5 @@
+from ExLibs.clock import clock
 import time as t
-
 import numpy as np
 from collections import deque
 import pandas as pd
@@ -57,7 +57,7 @@ class Session():
         
         buzzer.play_init()
         
-        self.session_start = t.time()
+        self.session_start = clock.time()
         
         self.session = {}
         self.trial_table = []
@@ -78,7 +78,7 @@ class Session():
         
         self.trial = None
         self.in_iti_period = False
-        self.reference_time = t.time()
+        self.reference_time = clock.time()
         
         self.peak_value = 0
         self.NEXT_STATE = STATE_IDLE
@@ -88,16 +88,16 @@ class Session():
         
         self.successes = []
         
-        self.current_time = t.time()
+        self.current_time = clock.time()
         self.last_move_time = 0
         
     def start(self):
-        print("starting session")
+        print("Session started")
         self.session_running = True
         while self.session_running:
             self.trial_logic()
             t.sleep(0.001)
-        print("done running session")
+        print("Session ended")
             
     def is_running(self):
         return self.session_running
@@ -106,16 +106,17 @@ class Session():
         return self.session_done
     
     def stop(self):
+        clock.reset()
         self.session_running = False
         if self.trial != None:
             self.trial.stop()
              
         
     def trial_logic(self):
-        self.current_time = t.time()
+        self.current_time = clock.time()
         
         latest_value, latest_time = self.input_device.get_latest()
-#         print("In session", latest_value)
+
         self.last_move_time = self.current_time
         CURRENT_STATE = self.NEXT_STATE
         
@@ -123,14 +124,13 @@ class Session():
         if CURRENT_STATE == STATE_IDLE:
             self.in_iti_period = False
             self.reference_time = latest_time
-            if t.time() - self.session_start > self.session_duration * 60 * 60 or self.num_trials >= self.max_trials or self.stop_session:
+            if clock.time() - self.session_start > self.session_duration * 60 or self.num_trials >= self.max_trials or self.stop_session:
                 self.NEXT_STATE = STATE_SESSION_END   
             elif latest_value >= self.init_threshold and self.previous_angle < self.init_threshold:
                 self.NEXT_STATE = STATE_TRIAL_STARTED
-#             print("self.current_time 0",self.current_time)
+                
         elif CURRENT_STATE == STATE_TRIAL_STARTED:
             self.num_trials += 1
-            print("Trial started")
             
             self.trial = Trial(self.init_threshold, self.hit_duration, self.hit_threshold, self.hold_time, self.post_trial_duration, self.iniBaseline,
                           self.gain, self.drop_tolerance, self.session_start, latest_time, self.input_device)
@@ -144,31 +144,19 @@ class Session():
                
             
             self.NEXT_STATE = STATE_INTER_TRIAL
-            print("turning true")
             self.in_iti_period = True
-            print("INTER")
             self.input_device.clear_data()
             self.last_trial_end_time = self.trial.get_end()
         elif CURRENT_STATE == STATE_INTER_TRIAL:
             if (self.current_time - self.last_trial_end_time) >= self.inter_trial_duration:
-                print("turning false")
                 self.in_iti_period = False
                 self.NEXT_STATE = STATE_IDLE
-                print("IDLE")
         elif CURRENT_STATE == STATE_SESSION_END:
-            self.session_running = True
+            self.stop()
             self.session_done = True
         
         self.previous_angle = latest_value
             
-    #     angles = get_angles()
-    #     timestamps = get_timestamps()
-        
-        # Check for inactivity+--------------------------------------------------+
-        # if angles and (current_time - last_move_time > 2):
-            # clear_data()
-            # last_move_time = current_time  # Reset the timer
-    #
     def adapt_values(self, success):
         if success:
             self.num_success += 1

@@ -10,6 +10,7 @@ import matplotlib.animation as animation
 import threading
 import numpy as np
 import time as t
+from ExLibs.clock import clock
 from tkinter.filedialog import askopenfilename
 import csv
 from datetime import datetime
@@ -26,7 +27,6 @@ class RatTaskGUI():
         self.root = tk.Tk()
         self.root.title("Rat Task")
         self.session_running = False
-        self.session_paused = False
 
         # Define the values modified by entries
         self.parameters = {}
@@ -52,6 +52,8 @@ class RatTaskGUI():
         self.parameters["inputType"] = tk.BooleanVar(self.root)
         self.parameters["iniBaseline"].set("1")
         
+        
+        
         self.parameters["minThreshAdapt"] = tk.StringVar(self.root)
         self.parameters["maxThreshAdapt"] = tk.StringVar(self.root)
         
@@ -66,15 +68,15 @@ class RatTaskGUI():
             
         
             
-        self.debut = t.time()
+        self.debut = clock.time()
         self.ani = None
         self.canClose = True
         self.timer_running = False
-        self.session_paused = False
         self.session_running = False
-        self.pause_start = t.time()
-        self.pause_time = 0
         self.create_frames()
+        self.paused = False
+        
+        self.session_running = False
         
         
         parameters_list = self.main_functions["get_parameters_list"]()
@@ -394,7 +396,7 @@ class RatTaskGUI():
             if not value.get() and not is_boolean(value.get()) and key not in ["saveFolder","holdTimeMin", "holdTimeMax", "hitThreshMax", "hitThreshMin", "forceDrop"]:
                 return False
         for key, value in self.parameters.items():
-            if key in ["gain", "holdTime", "hitThresh", "postTrialDuration", "interTrialDuration"] :
+            if key in ["gain", "holdTime", "hitThresh", "postTrialDuration", "interTrialDuration", "minDuration"] :
                 if not is_positive_float(value.get()):
                     return False
             elif key == "holdTimeAdapt":
@@ -416,7 +418,6 @@ class RatTaskGUI():
                     return False
             elif key not in ["saveFolder","holdTimeMin", "holdTimeMax", "hitThreshMax", "hitThreshMin", "forceDrop"]:
                 if not (is_int(value.get())):
-                    print(key)
                     return False
                 
         self.start_button.config(state="normal")
@@ -431,11 +432,8 @@ class RatTaskGUI():
 
 
     def chronometer(self, debut):
-        if (self.session_paused):
-            self.pause_time += t.time() - self.pause_start
-            self.pause_start = t.time()
-        elif self.main_functions["is_running"]():
-            chrono_sec = t.time() - self.debut - self.pause_time
+        if self.main_functions["is_running"]():
+            chrono_sec = clock.time() - self.debut
             chrono_timeLapse = timedelta(seconds=chrono_sec)
             hours, remainder = divmod(chrono_timeLapse.seconds, 3600)
             minutes, seconds = divmod(remainder, 60)
@@ -444,9 +442,8 @@ class RatTaskGUI():
             
 
     def start(self):
-        self.session_paused = False
         self.session_running = True
-        self.debut = t.time()
+        self.debut = clock.time()
         self.start_trial()
         
         self.start_button.config(command=self.pause, text="PAUSE")
@@ -454,22 +451,22 @@ class RatTaskGUI():
         
             
     def pause(self):
-        self.session_paused = True
-        self.pause_start = t.time()
-        self.start_button.config(command=self.resume_button, text="RESUME")
+        self.paused = True
+        clock.pause()
+        self.start_button.config(command=self.resume, text="RESUME")
         
         
     def resume(self):
-        self.session_paused = False
-
+        self.paused = False
+        clock.resume()
         self.start_button.config(command=self.pause, text="PAUSE")
         
     def remove_offset(self):
         self.main_functions["remove_offset"]()
         
     def stop(self):
+        self.session_running = False
         self.main_functions["stop_session"]()
-        self.session_paused = False
         self.start_button.config(state="normal",command=self.start, text="START")
         self.stop_button.config(state="disabled")
         self.finish_up(False)
@@ -541,7 +538,6 @@ class RatTaskGUI():
         self.refresh_input_text(self.root, 0)
             
 
-
     def display(self, text):
         self.display_box.config(text=text)
 
@@ -568,6 +564,7 @@ class RatTaskGUI():
         return entry
 
     def start_trial(self):
+        self.session_running = True
         init_threshold = float(self.parameters["iniThreshold"].get())
         hit_duration = float(self.parameters["hitWindow"].get())
         hit_threshold = float(self.parameters["hitThresh"].get())
@@ -575,9 +572,6 @@ class RatTaskGUI():
         self.init_threshold_line.set_ydata([init_threshold, init_threshold])
         self.hit_threshold_line.set_ydata([hit_threshold, hit_threshold])
         self.hit_duration_line.set_xdata([hit_duration * 1000, hit_duration * 1000])
-        
-        print(self.parameters["interTrialDuration"].get())
-        print(int(self.parameters["hitWindow"].get()) + int(self.parameters["interTrialDuration"].get()))
         
         xticks = np.arange(-1000, (int(self.parameters["hitWindow"].get()) + int(self.parameters["interTrialDuration"].get())) * 1000, 500)
         self.ax.set_xticks(xticks)
@@ -599,7 +593,7 @@ class RatTaskGUI():
 
     # Define an animation update function
     def animate(self, i):
-        if self.main_functions["is_running"]():
+        if self.main_functions["is_running"]() and not self.paused:
             self.updateDisplayValues()
             self.chronometer(self.debut)
             # Check if in ITI period
@@ -614,16 +608,13 @@ class RatTaskGUI():
             self.parameters["holdTime"].set(hold_time)
             self.init_threshold_line.set_ydata([float(self.parameters["iniThreshold"].get()), float(self.parameters["iniThreshold"].get())])
             self.hit_threshold_line.set_ydata([hit_threshold, hit_threshold])
-            
-            timestamps = data['timestamps'].values - reference_time * 1000
+            timestamps = data['timestamps'].values - reference_time * 1000 
             
             
             if len(timestamps) > 0:
                 self.ax.set_xlim(-1000, max(timestamps[-1], float(self.parameters["hitWindow"].get()) * 1000) + 1000)
-#                 self.ax.set_xticks(range(0, int(self.parameters["hitWindow"].get() * 1000) + 1000, 10))
-#                 self.ax.set_xticks(range(0, 6000 + 1000, 100))
+                timestamps = np.append(timestamps, (clock.time() - (reference_time)) * 1000)
                 
-                timestamps = np.append(timestamps, (t.time() - reference_time) * 1000)
             if len(angles) > 0:
                 self.ax.set_ylim( -10, max(hit_threshold, angles.max()) + 50)  # Add some padding
                 if (list(angles)[-1] > int(float(self.parameters["hitThresh"].get()))):
@@ -638,6 +629,13 @@ class RatTaskGUI():
             
             
             self.canvas.draw()
+        elif self.paused:
+            self.line.set_data([],[])
+            self.canvas.draw()
+        elif self.session_running and self.main_functions["session_done"]():
+            self.line.set_data([],[])
+            self.canvas.draw()
+            self.stop()
             
     def open_advanced(self):
         Advanced_Window(self)
@@ -649,7 +647,6 @@ class RatTaskGUI():
     def on_closing(self):
         if not self.canClose:
             return
-        print(self.main_functions.keys())
         self.main_functions["close"]()
         self.root.quit()
         self.root.destroy()
