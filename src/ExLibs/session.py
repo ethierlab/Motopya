@@ -28,7 +28,9 @@ NEXT_STATE = CURRENT_STATE
 
 class Session():
     def __init__(self, init_threshold, hit_duration, hit_threshold, post_trial_duration, inter_trial_duration, hold_time, iniBaseline, session_duration, hit_thresh_adapt, hit_thresh_min, hit_thresh_max,
-        hold_time_adapt, hold_time_min, hold_time_max, gain, drop_tolerance, max_trials, input_device, buzzer, light, min_thresh_adapt, max_thresh_adapt, min_time_adapt, max_time_adapt):
+        hold_time_adapt, hold_time_min, hold_time_max, gain, drop_tolerance, max_trials, input_device, buzzer, light, min_thresh_adapt, max_thresh_adapt, min_time_adapt, max_time_adapt,
+        adapt_thresh_change, adapt_time_change, adapt_min_trials):
+        
         self.init_threshold = init_threshold
         self.hit_duration = hit_duration
         self.hit_threshold = hit_threshold
@@ -50,10 +52,15 @@ class Session():
         self.buzzer = buzzer
         self.light = light
         
-        self.min_thresh_adapt = min_thresh_adapt
-        self.max_thresh_adapt = max_thresh_adapt
-        self.min_time_adapt = min_time_adapt
-        self.max_time_adapt = max_time_adapt
+        self.min_thresh_adapt = min_thresh_adapt / 100
+        self.max_thresh_adapt = max_thresh_adapt/ 100
+        self.min_time_adapt = min_time_adapt / 100
+        self.max_time_adapt = max_time_adapt / 100
+        
+        
+        self.adapt_thresh_change = adapt_thresh_change
+        self.adapt_time_change = adapt_time_change
+        self.adapt_min_trials = adapt_min_trials
         
         buzzer.play_init()
         
@@ -165,21 +172,21 @@ class Session():
             self.light.flash()
         else:
             self.buzzer.play_failure()
-            
+
+        
         self.successes.append(success)
         average = self.get_success_average()
-        
         if self.hit_thresh_adapt:
             if average >= self.max_thresh_adapt:
-                self.hit_threshold = min(self.hit_thresh_max, self.hit_threshold + 10)
+                self.hit_threshold = min(self.hit_thresh_max, self.hit_threshold + self.adapt_thresh_change)
             elif average <= self.min_thresh_adapt:
-                self.hit_threshold = min(self.hit_thresh_max, self.hit_threshold - 10)
+                self.hit_threshold = max(self.hit_thresh_min, self.hit_threshold - self.adapt_thresh_change)
                 
         if self.hold_time_adapt:
             if average >= self.max_time_adapt:
-                self.hold_time = min(self.hold_time_max, round(self.hold_time + 0.1, 4))
+                self.hold_time = min(self.hold_time_max, round(self.hold_time + self.adapt_time_change, 4))
             elif average <= self.min_time_adapt:
-                self.hold_time = max(self.hold_time_min, round(self.hold_time - 0.1, 4))
+                self.hold_time = max(self.hold_time_min, round(self.hold_time - self.adapt_time_change, 4))
                 
                 
     def is_in_iti_period(self):
@@ -209,7 +216,7 @@ class Session():
         return
         
     def get_success_average(self):
-        return sum(self.successes) / len(self.successes) if len(self.successes) >= 10 else 0.5
+        return sum(self.successes) / len(self.successes) if len(self.successes) >= self.adapt_min_trials and len(self.successes) > 0 else 0.5
         
     def get_adapted_values(self):
         return self.hit_threshold, self.hold_time

@@ -63,6 +63,11 @@ class RatTaskGUI():
         self.parameters["postTrialDuration"] = tk.StringVar(self.root)
         self.parameters["interTrialDuration"] = tk.StringVar(self.root)
         
+        self.parameters["adaptThreshChange"] = tk.StringVar(self.root)
+        self.parameters["adaptTimeChange"] = tk.StringVar(self.root)
+        
+        self.parameters["adaptMinTrials"] = tk.StringVar(self.root)
+        
         for value in self.parameters.values():
             value.trace_add("write", self.entry_changed)
             
@@ -216,8 +221,8 @@ class RatTaskGUI():
         self.adapt_label = tk.Label(self.Inner_Params_Frame, text="adapt").grid(row=3, column=2)
         self.min_label = tk.Label(self.Inner_Params_Frame, text="min").grid(row=3, column=3)
         self.max_label = tk.Label(self.Inner_Params_Frame, text="max").grid(row=3, column=4)
-        self.min_adapt_label = tk.Label(self.Inner_Params_Frame, text="Raise (%)").grid(row=3, column=5)
-        self.max_adapt_label = tk.Label(self.Inner_Params_Frame, text="Lower (%)").grid(row=3, column=6)
+        self.min_adapt_label = tk.Label(self.Inner_Params_Frame, text="Lower (%)").grid(row=3, column=5)
+        self.max_adapt_label = tk.Label(self.Inner_Params_Frame, text="Raise (%)").grid(row=3, column=6)
 
         self.min_thresh_entry = tk.Entry(self.Inner_Params_Frame, state=tk.DISABLED, textvariable=self.parameters["hitThreshMin"])
         self.min_thresh_entry.grid(row=4, column=3)
@@ -404,7 +409,7 @@ class RatTaskGUI():
             if not value.get() and not is_boolean(value.get()) and key not in ["saveFolder","holdTimeMin", "holdTimeMax", "hitThreshMax", "hitThreshMin", "forceDrop"]:
                 return False
         for key, value in self.parameters.items():
-            if key in ["holdTime", "hitThresh", "postTrialDuration", "interTrialDuration", "minDuration"] :
+            if key in ["holdTime", "hitThresh", "postTrialDuration", "interTrialDuration", "minDuration", "adaptThreshChange", "adaptTimeChange"] :
                 if not is_positive_float(value.get()):
                     return False
             elif key in ["gain"] :
@@ -502,15 +507,23 @@ class RatTaskGUI():
         if bool(self.parameters["hitThreshAdapt"].get()):
             self.min_thresh_entry.config(state="normal")
             self.max_thresh_entry.config(state="normal")
+            self.min_thresh_adapt_entry.config(state="normal")
+            self.max_thresh_adapt_entry.config(state="normal")
         else:
             self.min_thresh_entry.config(state="disabled")
             self.max_thresh_entry.config(state="disabled")
+            self.min_thresh_adapt_entry.config(state="disabled")
+            self.max_thresh_adapt_entry.config(state="disabled")
         if bool(self.parameters["holdTimeAdapt"].get()):
             self.min_time_entry.config(state="normal")
             self.max_time_entry.config(state="normal")
+            self.min_time_adapt_entry.config(state="normal")
+            self.max_time_adapt_entry.config(state="normal")
         else:
             self.min_time_entry.config(state="disabled")
             self.max_time_entry.config(state="disabled")
+            self.min_time_adapt_entry.config(state="disabled")
+            self.max_time_adapt_entry.config(state="disabled")
             
         self.refresh_input_text(self.root, 0)
         

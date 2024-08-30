@@ -104,8 +104,8 @@ class Lever(InputDevice):
 
 class RotaryEncoder(InputDevice):
     def __init__(self, gain):
-        self.encoder_a = 20  
-        self.encoder_b = 21  
+        self.encoder_a = 21  
+        self.encoder_b = 20  
 
         self.latest_value = 0
         self.data = pd.DataFrame(columns=["timestamps", "values"])
@@ -128,7 +128,7 @@ class RotaryEncoder(InputDevice):
         if clock.is_paused():
             return
         timestamp = int(clock.time() * 1000)  # Get current time in milliseconds
-        self.latest_value = round(self.get_value() * self.gain * -1 , 2)  # Get the current angle with 0.5 degree resolution
+        self.latest_value = round(self.get_value() * self.gain, 2)  # Get the current angle with 0.5 degree resolution
         self.latest_move_time = clock.time()
         
         self.update_data(timestamp, self.latest_value)
