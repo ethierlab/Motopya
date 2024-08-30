@@ -62,12 +62,11 @@ from datetime import timedelta
 
 from ExLibs.input_device import RotaryEncoder, Lever
 from ExLibs.session import Session
-# from ExLibs.gui import start_gui
 from ExLibs.utils import is_positive_float, is_percentage_range
 from ExLibs.feeder import gpio_feed
 from ExLibs.buzzer import Buzzer
 from ExLibs.light import Light
-from ExLibs.gui_class import RatTaskGUI
+from ExLibs.gui import RatTaskGUI
 from ExLibs.clock import clock
 
 
