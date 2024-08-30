@@ -26,6 +26,13 @@ class InputDevice(ABC):
     def get_latest_value(self):
         return self.latest_value
     
+    @abstractmethod
+    def get_raw_value(selt):
+        pass
+    
+    def get_value(self):
+        return self.get_raw_value() - self.offset
+    
     def update_data(self, timestamp, value):
         new_data = pd.DataFrame({"timestamps": [timestamp], "values": [self.latest_value]})
         
@@ -46,12 +53,12 @@ class InputDevice(ABC):
         self.gain = gain
         
     def remove_offset(self):
-        self.offset += self.latest_value
+        self.offset = self.get_raw_value()
     
 
 class Lever(InputDevice):
     def __init__(self, gain):
-        super().__init__(gain)
+        
         self.CHANNELS = ["in0/ref", "in1/ref", "in2/ref"]
         self.ads1015 = ADS1015()
         self.chip_type = self.ads1015.detect_chip_type()
@@ -65,16 +72,21 @@ class Lever(InputDevice):
             self.ads1015.set_sample_rate(860)
 
         self.reference = self.ads1015.get_reference_voltage()
+        
+        super().__init__(gain)
 
+
+    def get_raw_value(self):
+        return self.ads1015.get_compensated_voltage(
+                channel=self.CHANNELS[0], reference_voltage=self.reference
+                )
 
     def update_value(self):
         if clock.is_paused():
             return
         timestamp = int(clock.time() * 1000)  # Get current time in milliseconds
         try:
-            latest_value = round(self.ads1015.get_compensated_voltage(
-                channel=self.CHANNELS[0], reference_voltage=self.reference
-            ) * self.gain - self.offset, 1)
+            latest_value = round(self.get_value() * self.gain, 1)
         except OSError:
             print("ADS disconnected")
             return
@@ -92,24 +104,31 @@ class Lever(InputDevice):
 
 class RotaryEncoder(InputDevice):
     def __init__(self, gain):
-        super().__init__(gain)
         self.encoder_a = 20  
         self.encoder_b = 21  
 
         self.latest_value = 0
         self.data = pd.DataFrame(columns=["timestamps", "values"])
         self.encoder = None
+        self.setup_encoder()
+        
+        super().__init__(gain)
+        
+        
         
     def setup_encoder(self):
         self.initial_time = clock.time()
         self.encoder = RotaryEncoder2(self.encoder_a, self.encoder_b, max_steps=360,half_step=True)
         self.encoder.when_rotated = self.rotary_changed
         
+    def get_raw_value(self):
+        return self.encoder.steps
+    
     def rotary_changed(self):
         if clock.is_paused():
             return
         timestamp = int(clock.time() * 1000)  # Get current time in milliseconds
-        self.latest_value = round(self.encoder.steps * self.gain * -1 - self.offset, 2)  # Get the current angle with 0.5 degree resolution
+        self.latest_value = round(self.get_value() * self.gain * -1 , 2)  # Get the current angle with 0.5 degree resolution
         self.latest_move_time = clock.time()
         
         self.update_data(timestamp, self.latest_value)

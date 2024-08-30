@@ -62,12 +62,11 @@ from datetime import timedelta
 
 from ExLibs.input_device import RotaryEncoder, Lever
 from ExLibs.session import Session
-# from ExLibs.gui import start_gui
 from ExLibs.utils import is_positive_float, is_percentage_range
 from ExLibs.feeder import gpio_feed
 from ExLibs.buzzer import Buzzer
 from ExLibs.light import Light
-from ExLibs.gui_class import RatTaskGUI
+from ExLibs.gui import RatTaskGUI
 from ExLibs.clock import clock
 
 
@@ -286,6 +285,9 @@ def update_global_stats(filename):
 
 session_thread = None
 
+def get_lever_value():
+    return lever.get_value()
+
 # Function to start the trials
 def start_session():
     global session, session_thread
@@ -339,7 +341,6 @@ buzzer = Buzzer(13)
 light = Light(19)
 light.flash()
 encoder = RotaryEncoder(1)
-encoder.setup_encoder()
 
 exit_program = False
 lever = None
@@ -441,7 +442,8 @@ passed_functions = {
     'is_running': is_running,
     'remove_offset': remove_offset,
     'get_parameters_list': get_parameters_list,
-    'session_done': session_done
+    'session_done': session_done,
+    'get_lever_value': get_lever_value
 }
 
 
