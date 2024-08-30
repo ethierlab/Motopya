@@ -133,6 +133,12 @@ parameters["maxTimeAdapt"] = 70
 parameters["postTrialDuration"] = 1
 parameters["interTrialDuration"] = 1
 
+
+parameters["adaptThreshChange"] = 10
+parameters["adaptTimeChange"] = 0.1
+
+parameters["adaptMinTrials"] = 10
+
 def gui_save_parameters(parameters_list, file_path):
     update_parameters(parameters_list)
     return save_parameters(file_path)
@@ -323,6 +329,13 @@ def start_session():
     
     post_trial_duration = float(parameters["postTrialDuration"])
     
+    adapt_thresh_change = float(parameters["adaptThreshChange"])
+    adapt_time_change = float(parameters["adaptTimeChange"])
+
+    adapt_min_trials = float(parameters["adaptMinTrials"])
+    
+    
+    
     
     
     if (input_type):
@@ -333,7 +346,8 @@ def start_session():
     input_device.modify_gain(gain)
     
     session = Session(init_threshold, hit_duration, hit_threshold, post_trial_duration, inter_trial_duration, hold_time, iniBaseline, session_duration, hit_thresh_adapt, hit_thresh_min, hit_thresh_max,
-    hold_time_adapt, hold_time_min, hold_time_max, gain, drop_tolerance, max_trials, input_device, buzzer, light, min_thresh_adapt, max_thresh_adapt, min_time_adapt, max_time_adapt)
+    hold_time_adapt, hold_time_min, hold_time_max, gain, drop_tolerance, max_trials, input_device, buzzer, light, min_thresh_adapt, max_thresh_adapt, min_time_adapt, max_time_adapt,
+                      adapt_thresh_change, adapt_time_change, adapt_min_trials)
     
     running = True
 
