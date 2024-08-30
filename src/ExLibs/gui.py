@@ -739,31 +739,61 @@ class Calibration_Window():
         self.popup = tk.Toplevel(self.root)
         self.popup.title("Force Calibration")
         self.popup.geometry("750x600")
+        self.popup.minsize(width=500, height=600)
         
         self.popup.grab_set()
+        
+        self.popup.grid_rowconfigure(0, weight=1)
+        self.popup.grid_rowconfigure(1, weight=3)
+        
+        self.popup.grid_columnconfigure(0, weight=1)
+        
+        self.top_frame = tk.Frame(self.popup)
+        self.top_frame.grid(row=0, column=0, sticky="n", padx=10, pady=10)
+        
+        self.top_frame.grid_columnconfigure(0, weight=1)
+        self.top_frame.grid_columnconfigure(1, weight=1)
+        
+        
+        
+        self.bottom_frame = tk.Frame(self.popup)
+        self.bottom_frame.grid(row=1, column=0, sticky="nwew")
+        
+        self.bottom_frame.grid_rowconfigure(0, weight=1)
+        self.bottom_frame.grid_columnconfigure(0, weight=1)
+        
         
         self.get_lever_value = get_lever_value
         self.set_gain = set_gain
         self.gain = gain
         self.ratios = []
         self.data = []
-        tk.Label(self.popup, text="Known Force (g):").grid(row=0, column=0)
-        self.force_entry = tk.Entry(self.popup)
+        
+        tk.Label(self.top_frame, text="Known Force (g):").grid(row=0, column=0)
+        self.force_entry = tk.Entry(self.top_frame)
         self.force_entry.grid(row=0, column=1)
         
-        self.add_button = tk.Button(self.popup, text="Add Data Point", command=self.add_data_point)
+        self.add_button = tk.Button(self.top_frame, text="Add Data Point", command=self.add_data_point)
         self.add_button.grid(row=2, column=0, columnspan=2)
         
-        self.gain_label = tk.Label(self.popup, text="")
+        self.gain_label = tk.Label(self.top_frame, text="")
         self.gain_label.grid(row=4, column=0, columnspan=2)
         
         self.gain_label.config(text="Gain: " + str(self.gain))
         
+        self.message_label = tk.Label(self.top_frame, text="")
+        self.message_label.grid(row=5, column=0, columnspan=2)
         
         self.fig, self.ax = plt.subplots()
-        self.canvas = FigureCanvasTkAgg(self.fig, master=self.popup)
+        self.ax.set_title("Calibration Plot")
+        self.ax.set_xlabel("Analog Value")
+        self.ax.set_ylabel("Force (g)")
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self.bottom_frame)
         self.canvas_widget = self.canvas.get_tk_widget()
-        self.canvas_widget.grid(row=5, column=0, columnspan=2)
+        
+        self.canvas_widget.config(width=600, height=400)
+        
+        self.canvas_widget.grid(row=5, column=0, columnspan=2, sticky="nsew")
         
         
     def add_data_point(self):
@@ -771,15 +801,18 @@ class Calibration_Window():
             force = float(self.force_entry.get())
             analog_value = float(self.get_lever_value())
             if (analog_value != 0):
+                self.message_label.config(text="")
                 ratio = force / analog_value
                 self.data.append((analog_value, force))
                 self.ratios.append(ratio)
                 self.gain = sum(self.ratios) / len(self.ratios)
                 self.set_gain(self.gain)
+            else:
+                self.message_label.config(text="No points are added when analog value is 0")
             
             self.gain_label.config(text="Gain: " + str(self.gain) + " Analog : " + str(analog_value))
         except ValueError:
-            print("Input Error", "Please enter valid number for force")
+            self.message_label.config(text="Input Error : Please enter valid number for force")
             
         self.plot_data()
             
@@ -793,7 +826,7 @@ class Calibration_Window():
         
         self.ax.plot(x,y, 'o-', label="Force vs Analog Value")
         self.ax.set_xlabel("Analog Value")
-        self.ax.set_ylabel("Force (grams)")
+        self.ax.set_ylabel("Force (g)")
         self.ax.set_title("Calibration Plot")
         self.ax.legend()
         
